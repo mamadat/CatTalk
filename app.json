@@ -1,0 +1,14 @@
+{
+  "expo": {
+    "name": "CatTalk",
+    "slug": "cattalk",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "backgroundColor": "#F6F5F0",
+    "ios": { "supportsTablet": true, "bundleIdentifier": "com.cattalk.mobile" },
+    "android": { "package": "com.cattalk.mobile" },
+    "web": { "name": "CatTalk", "bundler": "metro" },
+    "plugins": [["expo-audio", { "microphonePermission": "برای ضبط صدای گربه و پیام‌های شما به میکروفون نیاز داریم.", "enableBackgroundRecording": false, "enableBackgroundPlayback": false }]]
+  }
+}

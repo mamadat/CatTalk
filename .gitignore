@@ -1,0 +1,10 @@
+node_modules/
+.expo/
+dist/
+dist-native/
+artifacts/
+web-build/
+*.log
+.env*
+android/
+ios/
