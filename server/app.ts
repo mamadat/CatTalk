@@ -2,10 +2,11 @@ import { createServer, IncomingMessage, ServerResponse } from 'node:http';
 import { timingSafeEqual } from 'node:crypto';
 import { createReadStream, existsSync, statSync } from 'node:fs';
 import { extname, resolve, sep } from 'node:path';
-import { PROMPT_VERSION, TranslationError, TranslationMode, validateTranslation } from '../shared/translation';
+import { PROMPT_VERSION, ProviderId, ProviderStatus, TranslationError, TranslationMode, validateTranslation } from '../shared/translation';
 import { TranslationProvider } from './provider';
 
 export interface ServerConfig {
+  providers?: Record<ProviderId,ProviderStatus>;
   configured: boolean;
   models: Record<TranslationMode,string>;
   accessToken?: string;
@@ -49,7 +50,7 @@ export function createTranslationServer(config:ServerConfig, provider:Translatio
     catch {json(res,400,{message:'نشانی نامعتبر است.'});return;}
     if (req.method === 'GET' && pathname === '/api/translation/status') {
       if (!authenticated(req,config.accessToken)) {json(res,401,{code:'UNAUTHORIZED',message:'توکن اتصال به سرور درست نیست.'});return;}
-      json(res,200,{service:'cattalk-translation',configured:config.configured,requiresToken:!!config.accessToken,models:config.models,promptVersion:PROMPT_VERSION});return;
+      json(res,200,{service:'cattalk-translation',configured:config.configured,requiresToken:!!config.accessToken,models:config.models,providers:config.providers,promptVersion:PROMPT_VERSION});return;
     }
     if (req.method !== 'POST' || pathname !== '/api/translate') {
       if (req.method === 'GET' && config.staticDirectory && !pathname.startsWith('/api/')) {
@@ -65,7 +66,7 @@ export function createTranslationServer(config:ServerConfig, provider:Translatio
     }
     if (!authenticated(req,config.accessToken)) {json(res,401,{code:'UNAUTHORIZED',message:'توکن اتصال به سرور درست نیست.'});return;}
     if (!req.headers['content-type']?.startsWith('application/json')) {json(res,415,{message:'نوع درخواست باید JSON باشد.'});return;}
-    if (!config.configured) {json(res,503,{code:'NOT_CONFIGURED',message:'سرویس ترجمه هنوز فعال نشده است. OPENAI_API_KEY را در .env سرور تنظیم و سرور را دوباره اجرا کنید.'});return;}
+    if (!config.configured) {json(res,503,{code:'NOT_CONFIGURED',message:'کلید یکی از سرویس‌های ترجمه را در .env سرور تنظیم و سرور را دوباره اجرا کنید.'});return;}
     const now=Date.now();
     for (const [key,bucket] of rates) if (bucket.reset < now) rates.delete(key);
     const ip=req.socket.remoteAddress || 'local';
@@ -79,6 +80,7 @@ export function createTranslationServer(config:ServerConfig, provider:Translatio
     res.on('close',closed);active++;
     try {
       const request=validateTranslation(await readBody(req));
+      if (config.providers && !config.providers[request.provider || 'openai'].configured) throw new TranslationError('NOT_CONFIGURED','کلید سرویس انتخاب‌شده تنظیم نشده؛ سرویس آمادهٔ دیگری را انتخاب کنید.',503);
       if (controller.signal.aborted) return;
       res.writeHead(200,{'Content-Type':'text/event-stream; charset=utf-8','Cache-Control':'no-store, no-transform','X-Accel-Buffering':'no','Connection':'keep-alive'});
       res.flushHeaders();
