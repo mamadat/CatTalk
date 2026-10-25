@@ -6,11 +6,12 @@ import {loadStore, saveStore} from './src/storage';
 import {removeAudio} from './src/audioFiles';
 import {Playback, Recorder} from './src/Recorder';
 import {Button, C, Card, Chips, Icon, IconName, s, T} from './src/ui';
+import {TranslatorScreen} from './src/translation/TranslatorScreen';
 
-type Tab = 'home' | 'listen' | 'speak' | 'history' | 'cats';
+type Tab = 'home' | 'listen' | 'speak' | 'history' | 'cats' | 'translate';
 const tabs: {id:Tab; title:string; icon:IconName}[] = [
   {id:'home',title:'خانه',icon:'grid-outline'}, {id:'listen',title:'بشنو',icon:'mic-outline'},
-  {id:'speak',title:'بگو',icon:'chatbubble-ellipses-outline'}, {id:'history',title:'دفترچه',icon:'book-outline'}, {id:'cats',title:'گربه‌ها',icon:'paw-outline'},
+  {id:'speak',title:'بگو',icon:'chatbubble-ellipses-outline'}, {id:'translate',title:'ترجمه',icon:'language-outline'}, {id:'history',title:'دفترچه',icon:'book-outline'}, {id:'cats',title:'گربه‌ها',icon:'paw-outline'},
 ];
 const date = (iso: string) => new Date(iso).toLocaleDateString('fa-IR', {month:'long', day:'numeric', hour:'2-digit', minute:'2-digit'});
 export default function App() {return <SafeAreaProvider><CatTalk/></SafeAreaProvider>;}
@@ -77,6 +78,7 @@ function CatTalk() {
     <ScrollView ref={scroll} style={{flex:1}} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
       {tab === 'home' && <>
         <View><T style={s.muted}>یک گفت‌وگوی کوچک، یک رابطهٔ نزدیک‌تر</T><T style={s.title}>{cat ? `دنیای ${cat.name} را بهتر بشناس` : 'هر میو، شروع یک ارتباط'}</T></View>
+        <Pressable accessibilityRole="button" accessibilityLabel="بازکردن ترجمهٔ فارسی و ژاپنی" onPress={() => navigate('translate')} style={[styles.translationBanner,s.between]}><View style={{flex:1}}><T style={{fontWeight:'700',fontSize:17}}>فارسی ↔ 日本語</T><T style={s.muted}>ترجمهٔ زندهٔ متن، هنگام تایپ</T></View><Icon name="language-outline" size={29}/></Pressable>
         <View style={styles.hero}>
           <View style={s.between}><View style={[s.badge,{backgroundColor:'#FFFFFF80'}]}><T style={{fontSize:11}}>همراه ارتباط با گربه</T></View><Icon name="sparkles-outline" color={C.green}/></View>
           <View style={styles.catArt}><View style={styles.halo}/><T style={styles.catEmoji}>🐈</T><View style={styles.bubble}><T style={{fontSize:13}}>میو… من اینجام!</T></View></View>
@@ -133,6 +135,7 @@ function CatTalk() {
         <CatForm onAdd={async (name,age) => {const id=uid(); await update(old => ({...old,cats:[...old.cats,{id,name,age}],selectedCatId:id})); await discardDraft();setNotice('پروفایل ساخته شد. حالا می‌توانید اولین مشاهده را ثبت کنید.');}}/>
         <Card><View style={s.row}><Icon name="lock-closed-outline"/><T style={s.subtitle}>داده‌ها پیش خودت می‌مانند</T></View><T style={s.muted}>صداها، پیام‌ها و دفترچه روی همین دستگاه ذخیره می‌شوند. حذف اپ یا پاک‌کردن داده‌های مرورگر ممکن است آن‌ها را حذف کند. هیچ آپلود خودکاری وجود ندارد.</T><Button title="روش کار و منابع علمی" secondary small onPress={() => setScience(true)}/></Card>
       </>}
+      {tab === 'translate' && <TranslatorScreen/>}
       <T style={{textAlign:'center',fontSize:10,color:'#8A978E',paddingTop:10}}>CATTALK · برای رابطه‌ای آگاهانه‌تر</T>
     </ScrollView>
     <View style={styles.nav}>{tabs.map(item => <Pressable key={item.id} accessibilityRole="tab" accessibilityLabel={item.title} accessibilityState={{selected:tab === item.id,disabled:recording}} onPress={() => navigate(item.id)} style={styles.navItem}><View style={[styles.navIcon,tab === item.id && {backgroundColor:C.mint}]}><Icon name={item.icon} size={23} color={tab === item.id ? C.green : '#8B968E'}/></View><T style={{fontSize:11,lineHeight:19,color:tab === item.id ? C.green : C.muted,fontWeight:tab === item.id ? '700' : '400'}}>{item.title}</T></Pressable>)}</View>
@@ -165,7 +168,7 @@ function Science() {
     ['ارتباط چندحسی · ۲۰۲۳','https://pmc.ncbi.nlm.nih.gov/articles/PMC10177025/'],
     ['یادگیری ارتباط واژه و تصویر · ۲۰۲۴','https://www.nature.com/articles/s41598-024-74006-2'],
   ];
-  return <><Card style={{backgroundColor:C.mint}}><T style={s.title}>شناخت بیشتر، ادعای کمتر.</T><T>CatTalk یک دفترچهٔ ارتباط و دستیار فرضیه‌سازی است. در نسخهٔ فعلی هیچ مدل آموزش‌دیدهٔ تشخیص معنای میو، تشخیص نوع صدا یا تحلیل ویدئو فعال نیست.</T></Card><Card><T style={s.subtitle}>برداشت‌ها چگونه ساخته می‌شوند؟</T><T>قواعد شفاف از مکان و رفتار گزارش‌شده استفاده می‌کنند. فیس‌کردن یا دورشدن، پیشنهاد فاصله‌دادن را در اولویت قرار می‌دهد. خرخر و میوی تنها به معنی شادی یا گرسنگی فرض نمی‌شوند.</T><T>پس از حداقل سه بازخورد در موقعیت مشابه برای همان گربه، توافق بازخوردها می‌تواند وزن یک برداشت موجود را کمی افزایش دهد. این سازگاری ساده، آموزش مدل صوتی یا اعتبارسنجی علمی نیست.</T><T>دقت گزارش‌شدهٔ پژوهش‌های محدود را نمی‌توان دقت این اپ دانست. تشخیص درد، بیماری و ترجمهٔ جمله‌به‌جمله خارج از توان این نسخه است.</T></Card><Card><T style={s.subtitle}>داده‌ها و ضبط</T><T>صدا و اطلاعات فقط محلی ذخیره می‌شوند؛ حساب کاربری، ردیاب یا آپلود صدا وجود ندارد. ضبط با درخواست شما آغاز و حداکثر پس از ۲۰ ثانیه متوقف می‌شود. برای پیام انسانی این حد ۸ ثانیه است.</T><T>در مرورگر، میکروفون به HTTPS یا localhost نیاز دارد. پاک‌کردن داده‌های مرورگر یا حذف اپ ممکن است دفترچه را حذف کند. هنگام پخش پیام، اگر گربه دور شد یا تنش نشان داد، پخش را متوقف کنید.</T></Card><Card><T style={s.subtitle}>منابع پایه</T><T style={s.muted}>این پژوهش‌ها الهام‌بخش طراحی‌اند و آزمون اثربخشی این اپ نیستند.</T>{sources.map(([title,url]) => <Pressable key={url} accessibilityRole="link" onPress={() => void Linking.openURL(url)} style={{paddingVertical:10,borderBottomWidth:1,borderColor:C.line}}><T style={{fontSize:14,color:C.green}}>{title} ↗</T></Pressable>)}</Card></>;
+  return <><Card style={{backgroundColor:C.mint}}><T style={s.title}>شناخت بیشتر، ادعای کمتر.</T><T>CatTalk یک دفترچهٔ ارتباط و دستیار فرضیه‌سازی است. در نسخهٔ فعلی هیچ مدل آموزش‌دیدهٔ تشخیص معنای میو، تشخیص نوع صدا یا تحلیل ویدئو فعال نیست.</T></Card><Card><T style={s.subtitle}>برداشت‌ها چگونه ساخته می‌شوند؟</T><T>قواعد شفاف از مکان و رفتار گزارش‌شده استفاده می‌کنند. فیس‌کردن یا دورشدن، پیشنهاد فاصله‌دادن را در اولویت قرار می‌دهد. خرخر و میوی تنها به معنی شادی یا گرسنگی فرض نمی‌شوند.</T><T>پس از حداقل سه بازخورد در موقعیت مشابه برای همان گربه، توافق بازخوردها می‌تواند وزن یک برداشت موجود را کمی افزایش دهد. این سازگاری ساده، آموزش مدل صوتی یا اعتبارسنجی علمی نیست.</T><T>دقت گزارش‌شدهٔ پژوهش‌های محدود را نمی‌توان دقت این اپ دانست. تشخیص درد، بیماری و ترجمهٔ جمله‌به‌جملهٔ صدای گربه خارج از توان این نسخه است.</T></Card><Card><T style={s.subtitle}>داده‌ها و ضبط</T><T>صدا و اطلاعات بخش گربه‌ها فقط محلی ذخیره می‌شوند؛ آپلود صدا وجود ندارد. در بخش جداگانهٔ ترجمهٔ فارسی–ژاپنی، متن و زمینهٔ واردشده برای پردازش به سرویس OpenAI ارسال می‌شوند. ضبط با درخواست شما آغاز و حداکثر پس از ۲۰ ثانیه متوقف می‌شود. برای پیام انسانی این حد ۸ ثانیه است.</T><T>در مرورگر، میکروفون به HTTPS یا localhost نیاز دارد. پاک‌کردن داده‌های مرورگر یا حذف اپ ممکن است دفترچه را حذف کند. هنگام پخش پیام، اگر گربه دور شد یا تنش نشان داد، پخش را متوقف کنید.</T></Card><Card><T style={s.subtitle}>منابع پایه</T><T style={s.muted}>این پژوهش‌ها الهام‌بخش طراحی‌اند و آزمون اثربخشی این اپ نیستند.</T>{sources.map(([title,url]) => <Pressable key={url} accessibilityRole="link" onPress={() => void Linking.openURL(url)} style={{paddingVertical:10,borderBottomWidth:1,borderColor:C.line}}><T style={{fontSize:14,color:C.green}}>{title} ↗</T></Pressable>)}</Card></>;
 }
 const styles = StyleSheet.create({
   safe:{flex:1,backgroundColor:C.bg}, shell:{flex:1,width:'100%',maxWidth:560,alignSelf:'center',backgroundColor:C.bg},
@@ -175,6 +178,7 @@ const styles = StyleSheet.create({
   catArt:{height:168,alignItems:'center',justifyContent:'center'}, halo:{position:'absolute',width:153,height:153,borderRadius:90,backgroundColor:'#F0F6E6'}, catEmoji:{fontSize:108,lineHeight:148,textAlign:'center'},bubble:{position:'absolute',right:0,top:14,backgroundColor:'#FFFFFFD9',paddingHorizontal:12,paddingVertical:6,borderRadius:15,borderBottomLeftRadius:2,transform:[{rotate:'-5deg'}]},
   duo:{flexDirection:'row-reverse',gap:12},tile:{flex:1,padding:17,borderRadius:22,gap:9,alignItems:'flex-end'},
   avatar:{height:52,width:52,borderRadius:18,alignItems:'center',justifyContent:'center',backgroundColor:'#DFEBD7'},
-  nav:{flexDirection:'row-reverse',borderTopWidth:1,borderColor:C.line,backgroundColor:'#FCFCF9',paddingHorizontal:12,paddingTop:9,paddingBottom:10}, navItem:{flex:1,alignItems:'center',gap:3}, navIcon:{paddingHorizontal:17,paddingVertical:6,borderRadius:14},
+  translationBanner:{backgroundColor:'#E7ECE2',borderWidth:1,borderColor:'#D7E2D3',borderRadius:21,padding:17},
+  nav:{flexDirection:'row-reverse',borderTopWidth:1,borderColor:C.line,backgroundColor:'#FCFCF9',paddingHorizontal:8,paddingTop:9,paddingBottom:10}, navItem:{flex:1,alignItems:'center',gap:3}, navIcon:{paddingHorizontal:10,paddingVertical:6,borderRadius:14},
   notice:{paddingHorizontal:20,paddingVertical:10,backgroundColor:C.amber},overlay:{flex:1,backgroundColor:'#18392E77',alignItems:'center',justifyContent:'center',padding:25},
 });

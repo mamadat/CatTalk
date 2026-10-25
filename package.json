@@ -12,6 +12,7 @@
     "typecheck": "tsc --noEmit",
     "test": "tsx --test tests/*.test.ts",
     "test:ui": "node tests/smoke.cjs",
+    "api": "tsx server/index.ts",
     "export:web": "expo export --platform web"
   },
   "dependencies": {

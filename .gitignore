@@ -6,5 +6,6 @@ artifacts/
 web-build/
 *.log
 .env*
+!.env.example
 android/
 ios/
