@@ -9,6 +9,6 @@
     "ios": { "supportsTablet": true, "bundleIdentifier": "com.cattalk.mobile" },
     "android": { "package": "com.cattalk.mobile" },
     "web": { "name": "CatTalk", "bundler": "metro" },
-    "plugins": [["expo-audio", { "microphonePermission": "برای ضبط صدای گربه و پیام‌های شما به میکروفون نیاز داریم.", "enableBackgroundRecording": false, "enableBackgroundPlayback": false }]]
+    "plugins": [["expo-audio", { "microphonePermission": "برای ضبط صدای گربه، پیام‌های شما و ترجمهٔ صوتی به میکروفون نیاز داریم.", "enableBackgroundRecording": false, "enableBackgroundPlayback": false }]]
   }
 }

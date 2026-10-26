@@ -4,8 +4,10 @@ import { createReadStream, existsSync, statSync } from 'node:fs';
 import { extname, resolve, sep } from 'node:path';
 import { PROMPT_VERSION, ProviderId, ProviderStatus, TranslationError, TranslationMode, validateTranslation } from '../shared/translation';
 import { TranslationProvider } from './provider';
+import {VoiceService} from './voice';
 
 export interface ServerConfig {
+  voice?: VoiceService;
   providers?: Record<ProviderId,ProviderStatus>;
   configured: boolean;
   models: Record<TranslationMode,string>;
@@ -22,11 +24,12 @@ function authenticated(req:IncomingMessage, token?:string) {
   const expected=Buffer.from(`Bearer ${token}`);
   return actual.length === expected.length && timingSafeEqual(actual,expected);
 }
-async function readBody(req:IncomingMessage) {
+async function readBody(req:IncomingMessage,limit=16384) {
+  if(Number(req.headers['content-length'] || 0)>limit) {req.resume();throw new TranslationError('BODY_TOO_LARGE','حجم درخواست بیش از حد مجاز است.',413);}
   let size=0; const chunks:Buffer[]=[];
-  for await (const chunk of req) {
+  for await (const chunk of req.iterator({destroyOnReturn:false})) {
     size += chunk.length;
-    if (size > 16384) throw new TranslationError('BODY_TOO_LARGE','حجم درخواست بیش از حد مجاز است.',413);
+    if (size > limit) {req.resume();throw new TranslationError('BODY_TOO_LARGE','حجم درخواست بیش از حد مجاز است.',413);}
     chunks.push(Buffer.from(chunk));
   }
   try {return JSON.parse(Buffer.concat(chunks).toString('utf8'));}
@@ -50,9 +53,10 @@ export function createTranslationServer(config:ServerConfig, provider:Translatio
     catch {json(res,400,{message:'نشانی نامعتبر است.'});return;}
     if (req.method === 'GET' && pathname === '/api/translation/status') {
       if (!authenticated(req,config.accessToken)) {json(res,401,{code:'UNAUTHORIZED',message:'توکن اتصال به سرور درست نیست.'});return;}
-      json(res,200,{service:'cattalk-translation',configured:config.configured,requiresToken:!!config.accessToken,models:config.models,providers:config.providers,promptVersion:PROMPT_VERSION});return;
+      json(res,200,{service:'cattalk-translation',configured:config.configured,requiresToken:!!config.accessToken,models:config.models,providers:config.providers,voice:config.voice?.capabilities,promptVersion:PROMPT_VERSION});return;
     }
-    if (req.method !== 'POST' || pathname !== '/api/translate') {
+    const isVoice=['/api/transcribe','/api/speech'].includes(pathname);
+    if (req.method !== 'POST' || (!isVoice && pathname !== '/api/translate')) {
       if (req.method === 'GET' && config.staticDirectory && !pathname.startsWith('/api/')) {
         const root=resolve(config.staticDirectory);
         const file=resolve(root, '.' + (pathname === '/' ? '/index.html' : pathname));
@@ -66,12 +70,12 @@ export function createTranslationServer(config:ServerConfig, provider:Translatio
     }
     if (!authenticated(req,config.accessToken)) {json(res,401,{code:'UNAUTHORIZED',message:'توکن اتصال به سرور درست نیست.'});return;}
     if (!req.headers['content-type']?.startsWith('application/json')) {json(res,415,{message:'نوع درخواست باید JSON باشد.'});return;}
-    if (!config.configured) {json(res,503,{code:'NOT_CONFIGURED',message:'کلید یکی از سرویس‌های ترجمه را در .env سرور تنظیم و سرور را دوباره اجرا کنید.'});return;}
+    if (!isVoice && !config.configured) {json(res,503,{code:'NOT_CONFIGURED',message:'کلید یکی از سرویس‌های ترجمه را در .env سرور تنظیم و سرور را دوباره اجرا کنید.'});return;}
     const now=Date.now();
     for (const [key,bucket] of rates) if (bucket.reset < now) rates.delete(key);
-    const ip=req.socket.remoteAddress || 'local';
+    const ip=(req.socket.remoteAddress || 'local')+(isVoice ? ':voice' : ':text');
     const bucket=rates.get(ip) || {count:0,reset:now+60000};
-    if (bucket.count >= (config.maxRequestsPerMinute ?? 30) || active >= 4) {res.setHeader('Retry-After','5');json(res,429,{code:'BUSY',message:'درخواست‌ها زیاد شده‌اند؛ چند لحظه مکث کنید.'});return;}
+    if (bucket.count >= (config.maxRequestsPerMinute ?? (isVoice?90:30)) || active >= 4) {res.setHeader('Retry-After','5');json(res,429,{code:'BUSY',message:'درخواست‌ها زیاد شده‌اند؛ چند لحظه مکث کنید.'});return;}
     bucket.count++;rates.set(ip,bucket);
     const controller=new AbortController();
     let timedOut=false;
@@ -79,6 +83,13 @@ export function createTranslationServer(config:ServerConfig, provider:Translatio
     const closed=() => controller.abort();
     res.on('close',closed);active++;
     try {
+      if (isVoice) {
+        if (!config.voice) throw new TranslationError('VOICE_NOT_CONFIGURED','سرویس صوتی هنوز تنظیم نشده است.',503);
+        const input=await readBody(req,pathname==='/api/transcribe' ? 9*1024*1024 : 16384);
+        const result=pathname==='/api/transcribe' ? await config.voice.transcribe(input,controller.signal) : await config.voice.speech(input,controller.signal);
+        if (!controller.signal.aborted && !res.destroyed) json(res,200,result);
+        return;
+      }
       const request=validateTranslation(await readBody(req));
       if (config.providers && !config.providers[request.provider || 'openai'].configured) throw new TranslationError('NOT_CONFIGURED','کلید سرویس انتخاب‌شده تنظیم نشده؛ سرویس آمادهٔ دیگری را انتخاب کنید.',503);
       if (controller.signal.aborted) return;

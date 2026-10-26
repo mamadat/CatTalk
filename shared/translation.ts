@@ -23,6 +23,7 @@ export type TranslationEvent =
   | { type: 'complete'; model: string; promptVersion: string }
   | { type: 'error'; code: string; message: string };
 export interface TranslationStatus {
+  voice?: import('./voice').VoiceCapabilities;
   providers?: Record<ProviderId,ProviderStatus>;
   service: 'cattalk-translation';
   configured: boolean;

@@ -3,6 +3,7 @@ import {ActivityIndicator,Platform,Pressable,Share,StyleSheet,Switch,TextInput,V
 import {ProviderId,providerNames,Language,languageNames,MAX_TEXT_LENGTH,modeNames,toneNames,TranslationMode,TranslationRequest,TranslationStatus,TranslationTone} from '../../shared/translation';
 import {Button,C,Card,Chips,Icon,s,T} from '../ui';
 import {checkTranslationServer,createTranslationTransport,normalizeServerUrl} from './client';
+import {VoicePanel} from './VoicePanel';
 import {emptyLiveState,LiveTranslationController} from './controller';
 
 function defaultUrl() {
@@ -14,6 +15,7 @@ function defaultUrl() {
   return '';
 }
 export function TranslatorScreen() {
+  const [inputMode,setInputMode]=useState<'text'|'voice'>('text');
   const [provider,setProvider]=useState<ProviderId>('gemini');
   const [text,setText]=useState('');const [source,setSource]=useState<Language>('fa');
   const target:Language=source === 'fa' ? 'ja' : 'fa';
@@ -46,7 +48,7 @@ export function TranslatorScreen() {
   const ready=status?.providers ? !!status.providers[provider]?.configured : provider === 'openai' && !!status?.configured;
   const selectedModel=status?.providers?.[provider]?.models[mode];
   const request=useMemo<TranslationRequest>(() => ({provider,text,source,target,mode,tone,context}),[provider,text,source,target,mode,tone,context]);
-  useEffect(() => {controller.update(ready ? request : null,auto && !composing);setCopyMessage('');},[controller,request,ready,auto,composing]);
+  useEffect(() => {controller.update(ready ? request : null,auto && !composing && inputMode === 'text');setCopyMessage('');},[controller,request,ready,auto,composing,inputMode]);
   function changeText(value:string) {controller.update(null);setText(value);}
   function swap() {
     controller.update(null);
@@ -59,7 +61,7 @@ export function TranslatorScreen() {
   }
   const phases={idle:'منتظر متن',paused:composing ? 'منتظر تکمیل تایپ ژاپنی' : 'ترجمهٔ خودکار متوقف است',waiting:'در انتظار پایان تایپ…',translating:'در حال ترجمه…',done:'ترجمه کامل شد',error:'ترجمه انجام نشد'};
   return <>
-    <View><T style={s.muted}>فارسی ↔ ژاپنی / ترجمهٔ زندهٔ متن</T><T style={s.title}>کلماتت، آن‌سوی زبان</T><T style={s.muted}>تایپ کن؛ پس از مکث کوتاه، ترجمه به‌تدریج ظاهر می‌شود.</T></View>
+    <View><T style={s.muted}>فارسی ↔ ژاپنی / ترجمهٔ زندهٔ متن و صدا</T><T style={s.title}>کلماتت، آن‌سوی زبان</T><T style={s.muted}>تایپ کن، ویس بفرست یا صحبت کن؛ ترجمه را ببین و بشنو.</T></View>
     <Card><T style={{fontWeight:'700'}}>انتخاب هوش مصنوعی</T>
       <Chips options={providerNames} value={provider} onChange={value => {controller.update(null);setProvider(value);}}/>
       <T style={s.muted}>{provider === 'openai' ? 'API پولی؛ اعتبار حساب OpenAI لازم است.' : provider === 'openrouter' ? 'مدل‌های رایگان با سهمیهٔ محدود؛ مدل انتخابی خودکار است و کیفیت می‌تواند متفاوت باشد.' : 'سهمیهٔ رایگان محدود با کلید حساب؛ میزان سهمیه و دسترسی به حساب و منطقه بستگی دارد.'}</T>
@@ -72,6 +74,8 @@ export function TranslatorScreen() {
       <Pressable accessibilityRole="button" accessibilityLabel="جابه‌جایی زبان‌ها" style={ts.swap} onPress={swap}><Icon name="swap-horizontal" color={C.green}/></Pressable>
       <View style={{flex:1,alignItems:'center'}}><T style={ts.language}>{languageNames[target]}</T><T style={s.muted}>ترجمه</T></View>
     </View>
+    <Chips options={{text:'ترجمهٔ متن',voice:'ترجمهٔ صوتی'}} value={inputMode} onChange={setInputMode}/>
+    {inputMode === 'voice' ? <VoicePanel url={url} token={token} status={status} request={request} ready={ready}/> : <>
     <Card style={{padding:17}}>
       <View style={s.between}><T style={{fontWeight:'700'}}>{languageNames[source]}</T><Pressable accessibilityRole="button" accessibilityLabel="پاک‌کردن متن" onPress={() => changeText('')} hitSlop={10}><Icon name="close-circle-outline" color={C.muted}/></Pressable></View>
       <TextInput ref={inputRef} accessibilityLabel="متن برای ترجمه" value={text} onChangeText={changeText} multiline maxLength={MAX_TEXT_LENGTH} autoCorrect={false} placeholder={source === 'fa' ? 'متن فارسی را اینجا بنویس…' : '日本語を入力してください…'} placeholderTextColor="#9AA69F" style={[s.input,ts.editor,{textAlign:source === 'fa' ? 'right' : 'left',writingDirection:source === 'fa' ? 'rtl' : 'ltr'}]}/>
@@ -86,6 +90,7 @@ export function TranslatorScreen() {
       {!!copyMessage && <T style={s.muted}>{copyMessage}</T>}
     </Card>
     <Button title={live.phase === 'error' ? 'تلاش دوباره' : auto ? 'ترجمهٔ همین متن' : 'ترجمه کن'} icon="language-outline" disabled={!ready || !text.trim() || composing} onPress={() => controller.update(request,true,true)}/>
+    </>}
     <Pressable accessibilityRole="button" onPress={() => setAdvanced(!advanced)} style={s.between}><T style={{fontWeight:'700'}}>لحن و کیفیت ترجمه</T><Icon name={advanced ? 'chevron-up' : 'chevron-down'} size={18}/></Pressable>
     {advanced && <Card><T style={{fontWeight:'700'}}>توازن سرعت و کیفیت</T><Chips options={modeNames} value={mode} onChange={setMode}/><T style={s.muted}>این حالت‌ها از مدل‌های تنظیم‌شدهٔ سرور استفاده می‌کنند؛ در Gemini و OpenRouter ممکن است هر سه یک مدل باشند. کیفیت این جفت‌زبان هنوز ارزیابی نشده است.</T><T style={{fontWeight:'700'}}>لحن</T><Chips options={toneNames} value={tone} onChange={setTone}/><TextInput accessibilityLabel="زمینهٔ اختیاری ترجمه" value={context} onChangeText={setContext} multiline maxLength={500} placeholder="زمینهٔ اختیاری: مثلاً ایمیل کاری به همکار ژاپنی" placeholderTextColor={C.muted} style={[s.input,{minHeight:80,textAlignVertical:'top'}]}/><T style={s.muted}>زمینه برای رفع ابهام فرستاده می‌شود و جزو خروجی ترجمه نیست.</T></Card>}
     <Card style={{backgroundColor:ready ? C.paper : C.amber}}>
