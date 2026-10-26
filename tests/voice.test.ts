@@ -53,15 +53,24 @@ test('sentence buffer emits each sentence once, retains tail and preserves decim
   assert.deepEqual(buffer.push('は雨です。'),['明日は雨です。']);assert.deepEqual(buffer.push('',true),[]);
   assert.deepEqual(buffer.push('عدد ۱.۵ است'),[]);assert.deepEqual(buffer.push('',true),['عدد ۱.۵ است']);
 });
-test('pause detection skips silence and waits 600ms after speech',()=>{
-  const vad=new PauseDetector(0);assert.equal(vad.update(-20,100),'wait');assert.equal(vad.update(-20,400),'wait');assert.equal(vad.update(-70,900),'wait');assert.equal(vad.update(-70,1000),'speech');
+test('pause detection keeps long speech and short pauses, and ends only after 3s silence',()=>{
+  const vad=new PauseDetector(0);
+  assert.equal(vad.update(-20,100),'wait');assert.equal(vad.update(-20,400),'wait');
+  assert.equal(vad.update(-70,1000),'wait');assert.equal(vad.update(-70,3300),'wait');
+  assert.equal(vad.update(-20,3350),'wait'); // resume before the silence deadline
+  assert.equal(vad.update(-70,6000),'wait');assert.equal(vad.update(-70,6350),'speech');
+  const long=new PauseDetector(0);for(let time=0;time<60000;time+=100)assert.equal(long.update(-20,time),'wait');
+  assert.equal(long.update(-70,62899),'wait');assert.equal(long.update(-70,62900),'speech');
   assert.equal(new PauseDetector(0).update(-100,10000),'empty');
 });
-test('voice pipeline speaks first finished sentence before translation completes, exactly once',async()=>{
+test('voice pipeline waits for complete full-context translation before speaking',async()=>{
   const spoken:string[]=[],states:VoiceTurnState[]=[];let finish!:()=>void;
-  const controller=new VoiceTurnController(async(_r,_signal,emit)=>{
-    emit({type:'delta',text:'こんにちは。'});assert.deepEqual(spoken,['こんにちは。']);
-    await new Promise<void>(resolve=>{finish=resolve;});emit({type:'delta',text:'明日行きます'});emit({type:'complete',model:'test',promptVersion:'test'});
+  const controller=new VoiceTurnController(async(r,_signal,emit)=>{
+    assert.equal(r.text,'سلام، فردا می‌آیم');
+    emit({type:'delta',text:'こんにちは。'});assert.deepEqual(spoken,[]);
+    await new Promise<void>(resolve=>{finish=resolve;});emit({type:'delta',text:'明日行きます'});
+    assert.deepEqual(spoken,[]);emit({type:'complete',model:'test',promptVersion:'test'});
+    assert.deepEqual(spoken,[]); // no playback until transport also returns successfully
   },(_signal,onStart)=>({enqueue(text){spoken.push(text);onStart();},async drain(){},stop(){}}),v=>states.push(v));
   const work=controller.run(request,async()=> 'سلام، فردا می‌آیم');await sleep(5);finish();await work;
   assert.deepEqual(spoken,['こんにちは。','明日行きます']);assert.equal(states.at(-1)?.phase,'done');assert.ok(states.at(-1)?.firstAudioMs!==undefined);
@@ -72,8 +81,8 @@ test('voice cancellation suppresses late transcript and output; broken stream st
   const controller=new VoiceTurnController(async()=>{calls++;},()=>session,v=>states.push(v));
   const work=controller.run(request,()=>new Promise(resolve=>{transcript=resolve;}));controller.stop();transcript('stale');await work;
   assert.equal(calls,0);assert.equal(states.at(-1)?.transcript,'');
-  const broken=new VoiceTurnController(async(_r,_s,emit)=>emit({type:'delta',text:'途中'}),()=>session,v=>states.push(v));
-  await assert.rejects(broken.run(request,async()=> 'سلام'));assert.equal(states.at(-1)?.phase,'error');assert.ok(stops>=2);
+  let enqueued=0;const broken=new VoiceTurnController(async(_r,_s,emit)=>emit({type:'delta',text:'途中。'}),()=>({...session,enqueue(){enqueued++;}}),v=>states.push(v));
+  await assert.rejects(broken.run(request,async()=> 'سلام'));assert.equal(states.at(-1)?.phase,'error');assert.ok(stops>=2);assert.equal(enqueued,0);
 });
 test('audio endpoints require gateway token, validate input, allow STT independently of translation and cancel upstream',async()=>{
   let aborted=false;

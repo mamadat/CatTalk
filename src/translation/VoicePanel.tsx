@@ -13,18 +13,17 @@ import {emptyVoiceState,SentenceBuffer,VoiceTurnController} from './voiceControl
 
 export function VoicePanel({url,token,status,request,ready}:{url:string;token:string;status?:TranslationStatus;request:TranslationRequest;ready:boolean}) {
   const [showSettings,setShowSettings]=useState(false);
-  const [input,setInput]=useState<'microphone'|'file'>('microphone');const [stt,setStt]=useState<STTProvider>('groq');const [engine,setEngine]=useState<VoiceEngine>('device');const [voiceMode,setVoiceMode]=useState<'fast'|'balanced'>('fast');
-  const [autoplay,setAutoplay]=useState(true),[live,setLive]=useState(emptyVoiceState),[interim,setInterim]=useState(''),[error,setError]=useState(''),[picking,setPicking]=useState(false),[micActive,setMicActive]=useState(false),[reset,setReset]=useState(0),[replaying,setReplaying]=useState(false);
+  const [input,setInput]=useState<'microphone'|'file'>('microphone');const [stt,setStt]=useState<STTProvider>('groq');const [engine,setEngine]=useState<VoiceEngine>('device');const [voiceMode,setVoiceMode]=useState<'fast'|'balanced'>('balanced');
+  const [autoplay,setAutoplay]=useState(true),[live,setLive]=useState(emptyVoiceState),[error,setError]=useState(''),[picking,setPicking]=useState(false),[micActive,setMicActive]=useState(false),[reset,setReset]=useState(0),[replaying,setReplaying]=useState(false);
   const [localVoice,setLocalVoice]=useState<string|undefined>();const replay=useRef<AbortController|undefined>(undefined);const fileGeneration=useRef(0);
   const controller=useMemo(()=>new VoiceTurnController(createTranslationTransport(url,token),(signal,onStart)=>createSpeechSession({engine,language:request.target,url,token,enabled:autoplay},signal,onStart),setLive),[url,token,engine,request.source,request.target,request.provider,request.tone,request.context,autoplay,stt,voiceMode]);
   useEffect(()=>{setLive(emptyVoiceState);setError('');return()=>{fileGeneration.current++;controller.stop();replay.current?.abort();};},[controller]);
   useEffect(()=>{let alive=true;setLocalVoice(undefined);void deviceVoice(request.target).then(v=>{if(alive)setLocalVoice(v?.name || '');}).catch(()=>{if(alive)setLocalVoice('');});return()=>{alive=false;};},[request.target]);
-  function cancel() {fileGeneration.current++;controller.stop();replay.current?.abort();setReplaying(false);setInterim('');setLive(value=>({...value,phase:'idle',error:undefined}));}
+  function cancel() {fileGeneration.current++;controller.stop();replay.current?.abort();setReplaying(false);setLive(value=>({...value,phase:'idle',error:undefined}));}
   function stopAll() {cancel();setReset(v=>v+1);setMicActive(false);}
   useEffect(()=>{const sub=AppState.addEventListener('change',next=>{if(next!=='active')stopAll();});return()=>sub.remove();},[controller]);
   const sttReady=!!status?.voice?.transcription[stt]?.configured;
   const speechReady=engine==='device' || !!status?.voice?.speech.gemini.configured;
-  async function runTranscript(text:string) {setError('');await controller.run({...request,mode:voiceMode},async()=>text);}
   async function runAudio(uri:string,mimeType:string) {
     setError('');await controller.run({...request,mode:voiceMode},async signal=>{
       const audio=await readVoiceFile(uri);if(signal.aborted)throw new DOMException('Aborted','AbortError');
@@ -58,19 +57,18 @@ export function VoicePanel({url,token,status,request,ready}:{url:string;token:st
   return <Card style={{backgroundColor:'#EEF3E9'}}>
     <T style={s.subtitle}>بگو، ترجمه‌اش را بشنو</T>
     <Chips options={{microphone:'میکروفون زنده',file:'ارسال فایل ویس'}} value={input} onChange={value=>{stopAll();setInput(value);}}/>
-    <T style={s.muted}>جهت گفتار از زبان‌های انتخاب‌شده در بالا پیروی می‌کند. پس از هر عبارت کوتاه مکث کنید؛ هنگام پخش، شنیدن موقتاً متوقف می‌شود.</T>
+    <T style={s.muted}>کل گفتار تا ۳ ثانیه سکوت جمع می‌شود، سپس یک‌جا ترجمه می‌شود. پخش پس از کامل‌شدن ترجمه آغاز می‌شود؛ هنگام ترجمه و پخش، میکروفون مکث می‌کند.</T>
     <Button small secondary title={showSettings?'بستن تنظیمات صدا':'تنظیمات تشخیص گفتار و صدا'} onPress={()=>setShowSettings(value=>!value)}/>
     {showSettings&&<>    <Chips options={{fast:'کمترین تأخیر',balanced:'متعادل'}} value={voiceMode} onChange={value=>{stopAll();setVoiceMode(value);}}/>
     <T style={{fontWeight:'700'}}>تشخیص گفتار فایل و ضبط</T><Chips options={sttNames} value={stt} onChange={value=>{stopAll();setStt(value);}}/>
     <T style={s.muted}>{sttReady?'کلید تشخیص گفتار تنظیم شده است.':`برای فایل ویس و ضبط، ${stt.toUpperCase()}_API_KEY را در .env تنظیم کنید.`}</T>
     <T style={{fontWeight:'700'}}>صدای ترجمه</T><Chips options={speechNames} value={engine} onChange={value=>{stopAll();setEngine(value);}}/>
     <T style={s.muted}>{engine==='device' ? localVoice ? `صدای آماده: ${localVoice}` : localVoice==='' ? 'صدای این زبان روی دستگاه پیدا نشد؛ بستهٔ صدای زبان را نصب کنید یا Gemini را انتخاب کنید.' : 'در حال بررسی صدای دستگاه…' : 'متن ترجمه برای تولید صدا به Gemini ارسال می‌شود؛ کلید و سهمیهٔ جداگانهٔ مدل صوتی لازم است.'}</T>
-    <View style={s.row}><Switch accessibilityLabel="پخش خودکار ترجمهٔ صوتی" value={autoplay} onValueChange={value=>{stopAll();setAutoplay(value);}}/><T style={s.muted}>پخش خودکار جمله‌های آماده</T></View>
+    <View style={s.row}><Switch accessibilityLabel="پخش خودکار ترجمهٔ صوتی" value={autoplay} onValueChange={value=>{stopAll();setAutoplay(value);}}/><T style={s.muted}>پخش خودکار پس از تکمیل ترجمه</T></View>
     </>}
-    {!showSettings&&<T style={s.muted}>{engine==='device'?'پخش با صدای دستگاه':'پخش با صدای Gemini'} · {voiceMode==='fast'?'حالت سریع':'حالت متعادل'}{input==='file'&&!sttReady?` · کلید ${stt.toUpperCase()} تنظیم نشده`:''}</T>}
+    {!showSettings&&<T style={s.muted}>{engine==='device'?'پخش با صدای دستگاه':'پخش با صدای Gemini'} · {voiceMode==='fast'?'حالت سریع':'حالت متعادل'}{!sttReady?` · کلید ${stt.toUpperCase()} تنظیم نشده`:''}</T>}
     {!showSettings&&engine==='device'&&localVoice===''&&<T style={s.muted}>صدای این زبان نصب نیست؛ از تنظیمات صدا Gemini را انتخاب کنید یا بستهٔ صدای زبان را نصب کنید.</T>}
-    {input==='microphone' ? <Microphone key={`${request.source}-${request.provider}-${stt}-${engine}-${autoplay}-${reset}`} language={request.source} disabled={!ready || (autoplay&&!speechReady) || picking || replaying} audioReady={sttReady} onText={runTranscript} onAudio={runAudio} onInterim={setInterim} onCancel={cancel} onError={setError} onActiveChange={setMicActive}/> : <><Button title={picking?'در حال پردازش ویس…':'انتخاب و ترجمهٔ ویس'} icon="attach-outline" disabled={!ready || !sttReady || (autoplay&&!speechReady) || picking || micActive || replaying} onPress={()=>void pick()}/><T style={s.muted}>MP3، M4A، WAV، OGG، WebM · حداکثر ۶ مگابایت؛ برای سرعت بهتر ویس کوتاه بفرستید.</T></>}
-    {!!interim&&<T testID="voice-interim" style={s.muted}>در حال شنیدن: {interim}</T>}
+    {input==='microphone' ? <Microphone key={`${request.source}-${request.provider}-${stt}-${engine}-${autoplay}-${reset}`} language={request.source} disabled={!ready || !sttReady || (autoplay&&!speechReady) || picking || replaying} audioReady={sttReady} onAudio={runAudio} onCancel={cancel} onError={setError} onActiveChange={setMicActive}/> : <><Button title={picking?'در حال پردازش ویس…':'انتخاب و ترجمهٔ ویس'} icon="attach-outline" disabled={!ready || !sttReady || (autoplay&&!speechReady) || picking || micActive || replaying} onPress={()=>void pick()}/><T style={s.muted}>MP3، M4A، WAV، OGG، WebM · حداکثر ۶ مگابایت؛ برای سرعت بهتر ویس کوتاه بفرستید.</T></>}
     <View style={s.row}>{busy&&<ActivityIndicator color={C.green}/>}<T style={{color:C.green,fontSize:12}}>{phases[live.phase]}</T></View>
     {!!live.transcript&&<><T style={{fontWeight:'700'}}>گفتار شنیده‌شده</T><T testID="voice-transcript" selectable style={{textAlign:request.source==='fa'?'right':'left'}}>{live.transcript}</T></>}
     {!!live.translation&&<><T style={{fontWeight:'700'}}>ترجمهٔ گفتار</T><T testID="voice-translation" selectable style={{fontSize:18,lineHeight:31,textAlign:request.target==='fa'?'right':'left'}}>{live.translation}</T></>}

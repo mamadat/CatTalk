@@ -20,7 +20,7 @@ export function Microphone(props:MicrophoneProps) {
     if(id!==generation.current || !wanted.current)return;
     try {await setAudioModeAsync({allowsRecording:true,playsInSilentMode:true});await recorder.prepareToRecordAsync();
       if(id!==generation.current || !wanted.current){await recorder.stop().catch(()=>{});return;}
-      recorder.record();recording.current=true;vad.current=new PauseDetector(Date.now());setPhase('گوش می‌دهم… پس از هر عبارت مکث کنید');
+      recorder.record();recording.current=true;vad.current=new PauseDetector(Date.now());setPhase('گوش می‌دهم… پس از ۳ ثانیه سکوت ترجمه می‌کنم');
     } catch {await stop();latest.current.onError('ضبط آغاز نشد؛ مجوز و دسترسی میکروفون را بررسی کنید.');}
   }
   async function finish(speech:boolean) {
@@ -38,5 +38,5 @@ export function Microphone(props:MicrophoneProps) {
     const permission=await AudioModule.requestRecordingPermissionsAsync();if(!permission.granted){latest.current.onError('دسترسی میکروفون را در تنظیمات دستگاه فعال کنید.');return;}
     wanted.current=true;const id=++generation.current;setActive(true);latest.current.onActiveChange(true);await listen(id);
   }
-  return <View style={{gap:10}}><Button title={active?'پایان مکالمهٔ زنده':'شروع مکالمهٔ زنده'} icon={active?'stop-circle-outline':'mic-outline'} disabled={props.disabled} onPress={()=>void(active?stop():start())}/>{active&&state.isRecording&&<Button secondary small title="ترجمهٔ همین عبارت" onPress={()=>void finish(true)}/>} {!!phase&&<T style={{color:C.green,fontSize:12}}>{phase}</T>}<T style={{color:C.muted,fontSize:12}}>تشخیص مکث حدود ۶۰۰ میلی‌ثانیه؛ ارسال عبارت‌های کوتاه و بازگشت خودکار به شنیدن پس از پخش.</T></View>;
+  return <View style={{gap:10}}><Button title={active?'پایان مکالمهٔ زنده':'شروع مکالمهٔ زنده'} icon={active?'stop-circle-outline':'mic-outline'} disabled={props.disabled} onPress={()=>void(active?stop():start())}/>{active&&state.isRecording&&<Button secondary small title="ترجمهٔ همین عبارت" onPress={()=>void finish(true)}/>} {!!phase&&<T style={{color:C.green,fontSize:12}}>{phase}</T>}<T style={{color:C.muted,fontSize:12}}>ضبط کامل هر نوبت تا ۳ ثانیه سکوت؛ حداکثر ۲ دقیقه گفتار پیوسته. بازگشت خودکار به شنیدن پس از پخش.</T></View>;
 }

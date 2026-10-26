@@ -34,7 +34,6 @@ export class VoiceTurnController {
     const current=()=>generation===this.generation && !abort.signal.aborted;
     const state:VoiceTurnState={phase:'transcribing',transcript:'',translation:''};const started=Date.now();
     const update=()=>{if(current())this.publish({...state});};update();
-    const sentences=new SentenceBuffer();
     const speech=this.makeSpeech(abort.signal,()=>{if(!current())return;state.firstAudioMs ??= Date.now()-started;update();});this.speech=speech;
     try {
       const text=await getTranscript(abort.signal);if(!current())return;
@@ -46,11 +45,13 @@ export class VoiceTurnController {
         if(event.type==='error')throw new Error(event.message);
         if(event.type==='delta') {
           state.translation+=event.text;state.firstTextMs ??= Date.now()-started;update();
-          for(const sentence of sentences.push(event.text))speech.enqueue(sentence);
-        } else if(event.type==='complete') {complete=true;for(const sentence of sentences.push('',true))speech.enqueue(sentence);}
+        } else if(event.type==='complete') {complete=true;}
       });
       if(!current())return;if(!complete)throw new Error('ترجمه پیش از تکمیل قطع شد.');
-      state.phase='speaking';update();await speech.drain();if(!current())return;
+      // Wait for the full, successfully completed translation before any audio.
+      state.phase='speaking';update();
+      for(const sentence of new SentenceBuffer().push(state.translation,true))speech.enqueue(sentence);
+      await speech.drain();if(!current())return;
       state.phase='done';state.elapsedMs=Date.now()-started;update();
     } catch(error) {
       if(!current())return;speech.stop();state.phase='error';state.error=error instanceof Error?error.message:'ترجمهٔ صوتی انجام نشد.';update();throw error;
