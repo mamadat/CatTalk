@@ -2,8 +2,12 @@ import {ProviderId,ProviderStatus,TranslationError,TranslationMode,PROMPT_VERSIO
 import {SSEParser} from '../shared/sse';
 import {buildTranslationInput} from './prompt';
 import {createOpenAIProvider,DEFAULT_MODELS,ProviderConfig,TranslationProvider} from './provider';
+import {createLocalEngines} from './localProviders';
 
 export const providerDefaults:Record<ProviderId,Record<TranslationMode,string>>={
+  translategemma:{balanced:'translategemma:4b',quality:'translategemma:4b',fast:'translategemma:4b'},
+  qwenlocal:{balanced:'qwen3:4b',quality:'qwen3:4b',fast:'qwen3:4b'},
+  libretranslate:{balanced:'Argos Translate (local)',quality:'Argos Translate (local)',fast:'Argos Translate (local)'},
   openai:DEFAULT_MODELS,
   gemini:{balanced:'gemini-3.8-flash',quality:'gemini-3.8-flash',fast:'gemini-3.8-flash'},
   groq:{balanced:'openai/gpt-oss-120b',quality:'openai/gpt-oss-120b',fast:'openai/gpt-oss-20b'},
@@ -63,17 +67,22 @@ export function createChatProvider(id:keyof typeof endpoints,config:ProviderConf
 export function createProviderRegistry(env:Record<string,string|undefined>,fetchImpl:typeof fetch=fetch) {
   const providers={} as Record<ProviderId,ProviderStatus>;
   const handlers={} as Record<ProviderId,TranslationProvider>;
+  const modelsByProvider={} as Record<ProviderId,Record<TranslationMode,string>>;
   for (const id of Object.keys(providerDefaults) as ProviderId[]) {
     const prefix=id.toUpperCase();const defaults=providerDefaults[id];
     const apiKey=env[`${prefix}_API_KEY`]?.trim() || '';
     const models={balanced:env[`${prefix}_TRANSLATION_MODEL`] || defaults.balanced,quality:env[`${prefix}_TRANSLATION_QUALITY_MODEL`] || defaults.quality,fast:env[`${prefix}_TRANSLATION_FAST_MODEL`] || defaults.fast};
+    modelsByProvider[id]=models;
+    if(['translategemma','qwenlocal','libretranslate'].includes(id))continue;
     providers[id]={configured:!!apiKey,models};
-    handlers[id]=id==='openai' ? createOpenAIProvider({apiKey,models},fetchImpl) : createChatProvider(id,{apiKey,models},fetchImpl);
+    handlers[id]=id==='openai' ? createOpenAIProvider({apiKey,models},fetchImpl) : createChatProvider(id as 'gemini'|'groq'|'openrouter',{apiKey,models},fetchImpl);
   }
+  const local=createLocalEngines(env,modelsByProvider,fetchImpl);Object.assign(providers,local.status);Object.assign(handlers,local.handlers);
+  async function refreshProviders(){await local.check();Object.assign(providers,local.status);return providers;}
   const translate:TranslationProvider=(request,signal,emit)=>{
     const id=request.provider || 'openai';
     if (!Object.hasOwn(handlers,id)) throw new TranslationError('INVALID_PROVIDER','سرویس انتخاب‌شده معتبر نیست.');
     return handlers[id](request,signal,emit);
   };
-  return {providers,translate};
+  return {providers,translate,refreshProviders};
 }

@@ -1,0 +1,24 @@
+services:
+  ollama:
+    image: ollama/ollama:latest
+    profiles: [ollama]
+    ports:
+      - "127.0.0.1:11434:11434"
+    environment:
+      OLLAMA_NO_CLOUD: "1"
+    volumes:
+      - cattalk-ollama:/root/.ollama
+  libretranslate:
+    image: libretranslate/libretranslate:latest
+    profiles: [libretranslate]
+    ports:
+      - "127.0.0.1:5000:5000"
+    environment:
+      LT_LOAD_ONLY: en,fa,ja
+      LT_CHAR_LIMIT: "2000"
+      LT_UPDATE_MODELS: "true"
+    volumes:
+      - cattalk-argos:/home/libretranslate/.local/share/argos-translate
+volumes:
+  cattalk-ollama:
+  cattalk-argos:

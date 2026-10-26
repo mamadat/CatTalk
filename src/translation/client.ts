@@ -1,6 +1,6 @@
 import { fetch as expoFetch } from 'expo/fetch';
 import { SSEParser } from '../../shared/sse';
-import { TranslationEvent, TranslationStatus } from '../../shared/translation';
+import { TranslationEvent, TranslationStatus,localProviders,ProviderId } from '../../shared/translation';
 import { Transport } from './controller';
 
 export function normalizeServerUrl(input:string) {
@@ -24,7 +24,7 @@ export function createTranslationTransport(url:string,token:string):Transport {
     signal.addEventListener('abort',cancel,{once:true});
     if (signal.aborted) abort.abort();
     let timedOut=false;
-    const timer=setTimeout(() => {timedOut=true;abort.abort();},50000);
+    const timer=setTimeout(() => {timedOut=true;abort.abort();},localProviders.includes(request.provider as ProviderId)?185000:50000);
     let reader:ReadableStreamDefaultReader<Uint8Array> | undefined;
     try {
       const response=await expoFetch(`${normalizeServerUrl(url)}/api/translate`,{method:'POST',signal:abort.signal,headers:{'Content-Type':'application/json',...headers(token)},body:JSON.stringify(request)});

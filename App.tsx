@@ -6,6 +6,8 @@ import {loadStore, saveStore} from './src/storage';
 import {removeAudio} from './src/audioFiles';
 import {Playback, Recorder} from './src/Recorder';
 import {Button, C, Card, Chips, Icon, IconName, s, T} from './src/ui';
+import {ShareBridge} from './src/messaging/ShareBridge';
+import {SharedChatText} from './src/messaging/ChatPanel';
 import {TranslatorScreen} from './src/translation/TranslatorScreen';
 
 type Tab = 'home' | 'listen' | 'speak' | 'history' | 'cats' | 'translate';
@@ -22,6 +24,7 @@ function CatTalk() {
   const [loadError, setLoadError] = useState('');
   const [tab, setTab] = useState<Tab>('home');
   const [notice, setNotice] = useState('');
+  const [sharedChat,setSharedChat]=useState<SharedChatText>();
   const [science, setScience] = useState(false);
   const [recording, setRecording] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -33,6 +36,7 @@ function CatTalk() {
   const [trialCue, setTrialCue] = useState<string>();
   const queue = useRef(Promise.resolve());
   const scroll = useRef<ScrollView>(null);
+  useEffect(()=>{if(sharedChat&&!recording&&!saving){setTab('translate');scroll.current?.scrollTo({y:0,animated:false});}},[sharedChat,recording,saving]);
   async function load() {try {const loaded = await loadStore(); setStore(loaded); storeRef.current = loaded; setReady(true); setLoadError('');} catch {setLoadError('داده‌های محلی خوانده نشدند. برای جلوگیری از ازدست‌رفتن اطلاعات، ذخیره‌سازی متوقف است.');}}
   useEffect(() => {void load();}, []);
   // Serialize read-modify-write transactions; commit UI only after durable storage succeeds.
@@ -73,6 +77,7 @@ function CatTalk() {
   const header = <View style={styles.header}><View style={s.row}><View style={styles.logo}><Icon name="paw" color={C.green}/></View><View><T style={{fontSize:22,fontWeight:'800',lineHeight:27,textAlign:'left'}}>CatTalk</T><T style={{fontSize:10,color:C.muted}}>کمی نزدیک‌تر به دنیای گربه‌ات</T></View></View><Pressable accessibilityRole="button" accessibilityLabel="دربارهٔ علم و حریم خصوصی" onPress={() => setScience(true)} style={styles.info}><Icon name="information-outline" size={20}/></Pressable></View>;
   if (!ready) return <SafeAreaView style={styles.safe}><View style={{padding:32,flex:1,justifyContent:'center',gap:20}}>{loadError ? <><T>{loadError}</T><Button title="تلاش دوباره" onPress={() => void load()}/></> : <><ActivityIndicator color={C.green}/><T style={{textAlign:'center'}}>دفترچهٔ گربه‌ها آماده می‌شود…</T></>}</View></SafeAreaView>;
   return <SafeAreaView style={styles.safe} edges={['top','bottom']}><StatusBar barStyle="dark-content" backgroundColor={C.bg}/><View style={styles.shell}>
+    <ShareBridge onText={text=>setSharedChat({id:uid(),text})} onError={setNotice}/>
     {header}
     {!!notice && <Pressable accessibilityRole="button" onPress={() => setNotice('')} style={styles.notice}><T accessibilityRole="alert" style={{fontSize:13}}>{notice} ×</T></Pressable>}
     <ScrollView ref={scroll} style={{flex:1}} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
@@ -135,7 +140,7 @@ function CatTalk() {
         <CatForm onAdd={async (name,age) => {const id=uid(); await update(old => ({...old,cats:[...old.cats,{id,name,age}],selectedCatId:id})); await discardDraft();setNotice('پروفایل ساخته شد. حالا می‌توانید اولین مشاهده را ثبت کنید.');}}/>
         <Card><View style={s.row}><Icon name="lock-closed-outline"/><T style={s.subtitle}>داده‌ها پیش خودت می‌مانند</T></View><T style={s.muted}>صداها، پیام‌ها و دفترچه روی همین دستگاه ذخیره می‌شوند. حذف اپ یا پاک‌کردن داده‌های مرورگر ممکن است آن‌ها را حذف کند. هیچ آپلود خودکاری وجود ندارد.</T><Button title="روش کار و منابع علمی" secondary small onPress={() => setScience(true)}/></Card>
       </>}
-      {tab === 'translate' && <TranslatorScreen/>}
+      {tab === 'translate' && <TranslatorScreen sharedChat={sharedChat} onSharedHandled={()=>setSharedChat(undefined)}/>}
       <T style={{textAlign:'center',fontSize:10,color:'#8A978E',paddingTop:10}}>CATTALK · برای رابطه‌ای آگاهانه‌تر</T>
     </ScrollView>
     <View style={styles.nav}>{tabs.map(item => <Pressable key={item.id} accessibilityRole="tab" accessibilityLabel={item.title} accessibilityState={{selected:tab === item.id,disabled:recording}} onPress={() => navigate(item.id)} style={styles.navItem}><View style={[styles.navIcon,tab === item.id && {backgroundColor:C.mint}]}><Icon name={item.icon} size={23} color={tab === item.id ? C.green : '#8B968E'}/></View><T style={{fontSize:11,lineHeight:19,color:tab === item.id ? C.green : C.muted,fontWeight:tab === item.id ? '700' : '400'}}>{item.title}</T></Pressable>)}</View>

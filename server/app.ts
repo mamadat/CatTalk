@@ -2,11 +2,15 @@ import { createServer, IncomingMessage, ServerResponse } from 'node:http';
 import { timingSafeEqual } from 'node:crypto';
 import { createReadStream, existsSync, statSync } from 'node:fs';
 import { extname, resolve, sep } from 'node:path';
-import { PROMPT_VERSION, ProviderId, ProviderStatus, TranslationError, TranslationMode, validateTranslation } from '../shared/translation';
+import { PROMPT_VERSION, ProviderId, ProviderStatus, TranslationError, TranslationMode, validateTranslation,localProviders } from '../shared/translation';
 import { TranslationProvider } from './provider';
 import {VoiceService} from './voice';
+import {MessagingService} from './messaging';
+import {messagePlatform} from '../shared/messaging';
 
 export interface ServerConfig {
+  messaging?:MessagingService;
+  refreshProviders?:()=>Promise<Record<ProviderId,ProviderStatus>>;
   voice?: VoiceService;
   providers?: Record<ProviderId,ProviderStatus>;
   configured: boolean;
@@ -24,7 +28,7 @@ function authenticated(req:IncomingMessage, token?:string) {
   const expected=Buffer.from(`Bearer ${token}`);
   return actual.length === expected.length && timingSafeEqual(actual,expected);
 }
-async function readBody(req:IncomingMessage,limit=16384) {
+async function readRaw(req:IncomingMessage,limit=16384) {
   if(Number(req.headers['content-length'] || 0)>limit) {req.resume();throw new TranslationError('BODY_TOO_LARGE','حجم درخواست بیش از حد مجاز است.',413);}
   let size=0; const chunks:Buffer[]=[];
   for await (const chunk of req.iterator({destroyOnReturn:false})) {
@@ -32,7 +36,11 @@ async function readBody(req:IncomingMessage,limit=16384) {
     if (size > limit) {req.resume();throw new TranslationError('BODY_TOO_LARGE','حجم درخواست بیش از حد مجاز است.',413);}
     chunks.push(Buffer.from(chunk));
   }
-  try {return JSON.parse(Buffer.concat(chunks).toString('utf8'));}
+  return Buffer.concat(chunks);
+}
+async function readBody(req:IncomingMessage,limit=16384) {
+  const raw=await readRaw(req,limit);
+  try {return JSON.parse(raw.toString('utf8'));}
   catch {throw new TranslationError('INVALID_JSON','درخواست قابل خواندن نیست.');}
 }
 export function createTranslationServer(config:ServerConfig, provider:TranslationProvider) {
@@ -51,9 +59,32 @@ export function createTranslationServer(config:ServerConfig, provider:Translatio
     let pathname:string;
     try {pathname=decodeURIComponent(new URL(req.url || '/', 'http://localhost').pathname);}
     catch {json(res,400,{message:'نشانی نامعتبر است.'});return;}
+    const webhook=pathname.match(/^\/api\/webhooks\/(telegram|whatsapp|instagram)$/);
+    if(webhook && messagePlatform(webhook[1])) {
+      try {
+        if(!config.messaging)throw new TranslationError('MESSAGING_NOT_CONFIGURED','اتصال پیام‌رسان تنظیم نشده است.',503);
+        if(req.method==='GET'){const result=config.messaging.challenge(webhook[1],new URL(req.url!,'http://localhost').searchParams);res.writeHead(200,{'Content-Type':'text/plain'});res.end(result);}
+        else if(req.method==='POST'){const raw=await readRaw(req,524288);config.messaging.receive(webhook[1],raw,req.headers);json(res,200,{received:true});}
+        else json(res,405,{message:'روش درخواست معتبر نیست.'});
+      }catch(error){const e=error instanceof TranslationError?error:new TranslationError('WEBHOOK_ERROR','پردازش وب‌هوک ناموفق بود.');json(res,e.status,{code:e.code,message:e.message});}return;
+    }
+    if(pathname.startsWith('/api/messaging/')) {
+      if(!config.accessToken){json(res,503,{message:'برای صندوق پیام خصوصی، TRANSLATION_ACCESS_TOKEN را روی سرور تنظیم کنید و همان توکن را در تنظیم اتصال اپ وارد کنید.'});return;}
+      if(!authenticated(req,config.accessToken)){json(res,401,{message:'توکن اتصال به صندوق پیام معتبر نیست.'});return;}
+      try {
+        if(!config.messaging)throw new TranslationError('MESSAGING_NOT_CONFIGURED','اتصال پیام‌رسان هنوز تنظیم نشده است.',503);
+        if(req.method==='GET'&&pathname==='/api/messaging/status')json(res,200,config.messaging.status());
+        else if(req.method==='GET'&&pathname==='/api/messaging/inbox')json(res,200,{messages:config.messaging.list()});
+        else if(req.method==='DELETE'&&pathname==='/api/messaging/inbox'){config.messaging.clear();json(res,200,{cleared:true});}
+        else if(req.method==='POST'&&pathname==='/api/messaging/drafts')json(res,200,config.messaging.draft(await readBody(req)));
+        else if(req.method==='POST'&&pathname==='/api/messaging/send'){const body=await readBody(req);json(res,200,await config.messaging.send(body?.draftId));}
+        else json(res,404,{message:'مسیر پیام‌رسان پیدا نشد.'});
+      }catch(error){const e=error instanceof TranslationError?error:new TranslationError('MESSAGING_ERROR','عملیات پیام‌رسان ناموفق بود.',502);json(res,e.status,{code:e.code,message:e.message});}return;
+    }
     if (req.method === 'GET' && pathname === '/api/translation/status') {
       if (!authenticated(req,config.accessToken)) {json(res,401,{code:'UNAUTHORIZED',message:'توکن اتصال به سرور درست نیست.'});return;}
-      json(res,200,{service:'cattalk-translation',configured:config.configured,requiresToken:!!config.accessToken,models:config.models,providers:config.providers,voice:config.voice?.capabilities,promptVersion:PROMPT_VERSION});return;
+      const providers=config.refreshProviders ? await config.refreshProviders() : config.providers;
+      json(res,200,{service:'cattalk-translation',configured:providers ? Object.values(providers).some(v=>v.configured) : config.configured,requiresToken:!!config.accessToken,models:config.models,providers,voice:config.voice?.capabilities,promptVersion:PROMPT_VERSION});return;
     }
     const isVoice=['/api/transcribe','/api/speech'].includes(pathname);
     if (req.method !== 'POST' || (!isVoice && pathname !== '/api/translate')) {
@@ -70,7 +101,7 @@ export function createTranslationServer(config:ServerConfig, provider:Translatio
     }
     if (!authenticated(req,config.accessToken)) {json(res,401,{code:'UNAUTHORIZED',message:'توکن اتصال به سرور درست نیست.'});return;}
     if (!req.headers['content-type']?.startsWith('application/json')) {json(res,415,{message:'نوع درخواست باید JSON باشد.'});return;}
-    if (!isVoice && !config.configured) {json(res,503,{code:'NOT_CONFIGURED',message:'کلید یکی از سرویس‌های ترجمه را در .env سرور تنظیم و سرور را دوباره اجرا کنید.'});return;}
+    if (!isVoice && !config.configured && !config.refreshProviders) {json(res,503,{code:'NOT_CONFIGURED',message:'یکی از موتورهای محلی را اجرا یا کلید یک سرویس ابری را تنظیم کنید.'});return;}
     const now=Date.now();
     for (const [key,bucket] of rates) if (bucket.reset < now) rates.delete(key);
     const ip=(req.socket.remoteAddress || 'local')+(isVoice ? ':voice' : ':text');
@@ -79,7 +110,7 @@ export function createTranslationServer(config:ServerConfig, provider:Translatio
     bucket.count++;rates.set(ip,bucket);
     const controller=new AbortController();
     let timedOut=false;
-    const timer=setTimeout(() => {timedOut=true;controller.abort();},config.timeoutMs ?? 45000);
+    let timer=setTimeout(() => {timedOut=true;controller.abort();},config.timeoutMs ?? 45000);
     const closed=() => controller.abort();
     res.on('close',closed);active++;
     try {
@@ -91,7 +122,11 @@ export function createTranslationServer(config:ServerConfig, provider:Translatio
         return;
       }
       const request=validateTranslation(await readBody(req));
-      if (config.providers && !config.providers[request.provider || 'openai'].configured) throw new TranslationError('NOT_CONFIGURED','کلید سرویس انتخاب‌شده تنظیم نشده؛ سرویس آمادهٔ دیگری را انتخاب کنید.',503);
+      if(localProviders.includes(request.provider as ProviderId) && config.timeoutMs===undefined){clearTimeout(timer);timer=setTimeout(()=>{timedOut=true;controller.abort();},180000);}
+      const providers=config.refreshProviders ? await config.refreshProviders() : config.providers;
+      const selected=providers?.[request.provider || 'openai'];
+      if(selected?.availableModes?.[request.mode]===false)throw new TranslationError('MODEL_NOT_INSTALLED','مدل حالت انتخاب‌شده نصب نشده است؛ مدل را دانلود یا حالت دیگری انتخاب کنید.',503);
+      if (providers && !selected?.configured) throw new TranslationError('NOT_CONFIGURED',selected?.message || 'سرویس انتخاب‌شده آماده نیست؛ تنظیمات یا مدل نصب‌شده را بررسی کنید.',503);
       if (controller.signal.aborted) return;
       res.writeHead(200,{'Content-Type':'text/event-stream; charset=utf-8','Cache-Control':'no-store, no-transform','X-Accel-Buffering':'no','Connection':'keep-alive'});
       res.flushHeaders();

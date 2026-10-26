@@ -1,22 +1,22 @@
 import React,{useEffect,useMemo,useRef,useState} from 'react';
 import {ActivityIndicator,AppState,Switch,View} from 'react-native';
 import * as DocumentPicker from 'expo-document-picker';
-import {Language,TranslationRequest,TranslationStatus} from '../../shared/translation';
+import {Language,TranslationRequest,TranslationStatus,localProviders} from '../../shared/translation';
 import {MAX_AUDIO_BYTES,STTProvider,VoiceEngine,sttNames,speechNames} from '../../shared/voice';
 import {Button,C,Card,Chips,s,T} from '../ui';
-import {createTranslationTransport} from './client';
+import {Transport} from './controller';
 import {Microphone} from './Microphone';
 import {readVoiceFile,removeVoiceTemp} from './voiceFiles';
 import {transcribeVoice} from './voiceClient';
 import {createSpeechSession,deviceVoice} from './speech';
 import {emptyVoiceState,SentenceBuffer,VoiceTurnController} from './voiceController';
 
-export function VoicePanel({url,token,status,request,ready}:{url:string;token:string;status?:TranslationStatus;request:TranslationRequest;ready:boolean}) {
+export function VoicePanel({url,token,status,request,ready,transport}:{url:string;token:string;status?:TranslationStatus;request:TranslationRequest;ready:boolean;transport:Transport}) {
   const [showSettings,setShowSettings]=useState(false);
   const [input,setInput]=useState<'microphone'|'file'>('microphone');const [stt,setStt]=useState<STTProvider>('groq');const [engine,setEngine]=useState<VoiceEngine>('device');const [voiceMode,setVoiceMode]=useState<'fast'|'balanced'>('balanced');
   const [autoplay,setAutoplay]=useState(true),[live,setLive]=useState(emptyVoiceState),[error,setError]=useState(''),[picking,setPicking]=useState(false),[micActive,setMicActive]=useState(false),[reset,setReset]=useState(0),[replaying,setReplaying]=useState(false);
   const [localVoice,setLocalVoice]=useState<string|undefined>();const replay=useRef<AbortController|undefined>(undefined);const fileGeneration=useRef(0);
-  const controller=useMemo(()=>new VoiceTurnController(createTranslationTransport(url,token),(signal,onStart)=>createSpeechSession({engine,language:request.target,url,token,enabled:autoplay},signal,onStart),setLive),[url,token,engine,request.source,request.target,request.provider,request.tone,request.context,autoplay,stt,voiceMode]);
+  const controller=useMemo(()=>new VoiceTurnController(transport,(signal,onStart)=>createSpeechSession({engine,language:request.target,url,token,enabled:autoplay},signal,onStart),setLive),[transport,url,token,engine,request.source,request.target,request.provider,request.tone,request.context,autoplay,stt,voiceMode]);
   useEffect(()=>{setLive(emptyVoiceState);setError('');return()=>{fileGeneration.current++;controller.stop();replay.current?.abort();};},[controller]);
   useEffect(()=>{let alive=true;setLocalVoice(undefined);void deviceVoice(request.target).then(v=>{if(alive)setLocalVoice(v?.name || '');}).catch(()=>{if(alive)setLocalVoice('');});return()=>{alive=false;};},[request.target]);
   function cancel() {fileGeneration.current++;controller.stop();replay.current?.abort();setReplaying(false);setLive(value=>({...value,phase:'idle',error:undefined}));}
@@ -56,6 +56,7 @@ export function VoicePanel({url,token,status,request,ready}:{url:string;token:st
   const phases={idle:'آمادهٔ دریافت صدا',transcribing:'تبدیل گفتار به متن…',translating:'ترجمهٔ زنده…',speaking:'در حال تکمیل پخش…',done:'ترجمهٔ صوتی کامل شد',error:'ترجمهٔ صوتی کامل نشد'};
   return <Card style={{backgroundColor:'#EEF3E9'}}>
     <T style={s.subtitle}>بگو، ترجمه‌اش را بشنو</T>
+    {request.provider&&localProviders.includes(request.provider)&&<T style={s.muted}>ترجمهٔ متن با موتور محلی رایگان است؛ تشخیص گفتار همچنان به کلید و سهمیهٔ Groq یا Gemini نیاز دارد. صدای دستگاه کلید نمی‌خواهد.</T>}
     <Chips options={{microphone:'میکروفون زنده',file:'ارسال فایل ویس'}} value={input} onChange={value=>{stopAll();setInput(value);}}/>
     <T style={s.muted}>کل گفتار تا ۳ ثانیه سکوت جمع می‌شود، سپس یک‌جا ترجمه می‌شود. پخش پس از کامل‌شدن ترجمه آغاز می‌شود؛ هنگام ترجمه و پخش، میکروفون مکث می‌کند.</T>
     <Button small secondary title={showSettings?'بستن تنظیمات صدا':'تنظیمات تشخیص گفتار و صدا'} onPress={()=>setShowSettings(value=>!value)}/>

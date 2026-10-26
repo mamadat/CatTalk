@@ -6,9 +6,38 @@
     "orientation": "portrait",
     "userInterfaceStyle": "light",
     "backgroundColor": "#F6F5F0",
-    "ios": { "supportsTablet": true, "bundleIdentifier": "com.cattalk.mobile" },
-    "android": { "package": "com.cattalk.mobile" },
-    "web": { "name": "CatTalk", "bundler": "metro" },
-    "plugins": [["expo-audio", { "microphonePermission": "برای ضبط صدای گربه، پیام‌های شما و ترجمهٔ صوتی به میکروفون نیاز داریم.", "enableBackgroundRecording": false, "enableBackgroundPlayback": false }]]
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.cattalk.mobile"
+    },
+    "android": {
+      "package": "com.cattalk.mobile"
+    },
+    "web": {
+      "name": "CatTalk",
+      "bundler": "metro"
+    },
+    "plugins": [
+      [
+        "expo-audio",
+        {
+          "microphonePermission": "برای ضبط صدای گربه، پیام‌های شما و ترجمهٔ صوتی به میکروفون نیاز داریم.",
+          "enableBackgroundRecording": false,
+          "enableBackgroundPlayback": false
+        }
+      ],
+      [
+        "expo-share-intent",
+        {
+          "androidIntentFilters": [
+            "text/plain"
+          ],
+          "iosActivationRules": {
+            "NSExtensionActivationSupportsText": true
+          }
+        }
+      ]
+    ],
+    "scheme": "cattalk"
   }
 }

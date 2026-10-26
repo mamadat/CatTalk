@@ -3,6 +3,7 @@ import { resolve } from 'node:path';
 import { createTranslationServer } from './app';
 import { createProviderRegistry } from './providers';
 import {createVoiceService} from './voice';
+import {createMessagingService} from './messaging';
 
 if (existsSync('.env')) process.loadEnvFile('.env');
 const host=process.env.TRANSLATION_HOST || '127.0.0.1';
@@ -13,11 +14,11 @@ if (!['127.0.0.1','localhost','::1'].includes(host) && !token) throw new Error('
 const registry=createProviderRegistry(process.env);
 const configured=Object.values(registry.providers).some(value=>value.configured);
 const origins=(process.env.TRANSLATION_ALLOWED_ORIGINS || `http://localhost:${port},http://127.0.0.1:${port},http://localhost:8081,http://127.0.0.1:8081,http://localhost:8082,http://127.0.0.1:8082`).split(',').map((v:string) => v.trim()).filter(Boolean);
-const server=createTranslationServer({configured,models:registry.providers.openai.models,providers:registry.providers,voice:createVoiceService(process.env),accessToken:token,allowedOrigins:origins,staticDirectory:resolve('dist')},registry.translate);
+const server=createTranslationServer({configured,models:registry.providers.openai.models,providers:registry.providers,refreshProviders:registry.refreshProviders,voice:createVoiceService(process.env),messaging:createMessagingService(process.env),accessToken:token,allowedOrigins:origins,staticDirectory:resolve('dist')},registry.translate);
 server.requestTimeout=15000;
 server.headersTimeout=10000;
 server.listen(port,host,() => {
   console.log(`CatTalk translation + web: http://${host}:${port}`);
-  console.log(configured ? 'Translation providers configured.' : 'Translation inactive: add a provider API key to .env, then restart.');
+  console.log(configured ? 'Cloud translation providers configured; local engines checked on demand.' : 'Run a local translation engine or add a cloud provider API key.');
 });
 server.on('error',error => {console.error(error.message);process.exitCode=1;});

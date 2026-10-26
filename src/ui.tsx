@@ -12,7 +12,7 @@ export function Button({title, onPress, icon, secondary, disabled, danger, small
     {icon && <Icon name={icon} size={19} color={color}/>}<T style={{color, fontWeight:'700', fontSize: small ? 13 : 15}}>{title}</T>
   </Pressable>;
 }
-export function Chips<K extends string>({options, value, onChange}: {options: Record<K, string>; value: K; onChange: (key: K) => void}) {
+export function Chips<K extends string>({options, value, onChange}: {options: Partial<Record<K, string>>; value: K; onChange: (key: K) => void}) {
   return <View style={s.chips}>{(Object.keys(options) as K[]).map(key => <Pressable key={key} accessibilityRole="radio" accessibilityState={{selected: value === key}} onPress={() => onChange(key)} style={[s.chip, value === key && s.chipSelected]}><T style={{fontSize: 13, color: value === key ? '#fff' : C.muted}}>{options[key]}</T></Pressable>)}</View>;
 }
 export const s = StyleSheet.create({

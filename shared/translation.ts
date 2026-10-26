@@ -1,9 +1,11 @@
 export type Language = 'fa' | 'ja';
 export type TranslationMode = 'balanced' | 'quality' | 'fast';
 export type TranslationTone = 'preserve' | 'polite' | 'casual';
-export const providerNames = {gemini:'Google Gemini',groq:'Groq',openrouter:'OpenRouter Free',openai:'OpenAI'} as const;
+export const providerNames = {translategemma:'TranslateGemma محلی',qwenlocal:'Qwen محلی',libretranslate:'LibreTranslate محلی',gemini:'Google Gemini',groq:'Groq',openrouter:'OpenRouter Free',openai:'OpenAI'} as const;
 export type ProviderId = keyof typeof providerNames;
-export interface ProviderStatus {configured:boolean; models:Record<TranslationMode,string>;}
+export const localProviders:ProviderId[]=['translategemma','qwenlocal','libretranslate'];
+export const providerSupportsOptions=(id:ProviderId)=>!['translategemma','libretranslate'].includes(id);
+export interface ProviderStatus {configured:boolean; models:Record<TranslationMode,string>;message?:string;availableModes?:Record<TranslationMode,boolean>;}
 export const languageNames = { fa: 'فارسی', ja: '日本語' } as const;
 export const modeNames = { balanced: 'متعادل', quality: 'دقت بیشتر', fast: 'سریع‌تر' } as const;
 export const toneNames = { preserve: 'حفظ لحن متن', polite: 'محترمانه', casual: 'خودمانی' } as const;
