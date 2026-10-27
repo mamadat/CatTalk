@@ -6,10 +6,12 @@ import { PROMPT_VERSION, ProviderId, ProviderStatus, TranslationError, Translati
 import { TranslationProvider } from './provider';
 import {VoiceService} from './voice';
 import {MessagingService} from './messaging';
+import {VisionService} from './vision';
 import {messagePlatform} from '../shared/messaging';
 
 export interface ServerConfig {
   messaging?:MessagingService;
+  vision?:VisionService;
   refreshProviders?:()=>Promise<Record<ProviderId,ProviderStatus>>;
   voice?: VoiceService;
   providers?: Record<ProviderId,ProviderStatus>;
@@ -84,9 +86,9 @@ export function createTranslationServer(config:ServerConfig, provider:Translatio
     if (req.method === 'GET' && pathname === '/api/translation/status') {
       if (!authenticated(req,config.accessToken)) {json(res,401,{code:'UNAUTHORIZED',message:'توکن اتصال به سرور درست نیست.'});return;}
       const providers=config.refreshProviders ? await config.refreshProviders() : config.providers;
-      json(res,200,{service:'cattalk-translation',configured:providers ? Object.values(providers).some(v=>v.configured) : config.configured,requiresToken:!!config.accessToken,models:config.models,providers,voice:config.voice?.capabilities,promptVersion:PROMPT_VERSION});return;
+      json(res,200,{service:'cattalk-translation',configured:providers ? Object.values(providers).some(v=>v.configured) : config.configured,requiresToken:!!config.accessToken,models:config.models,providers,voice:config.voice?.capabilities,vision:config.vision?.status,promptVersion:PROMPT_VERSION});return;
     }
-    const isVoice=['/api/transcribe','/api/speech'].includes(pathname);
+    const isVoice=['/api/transcribe','/api/speech','/api/ocr'].includes(pathname);
     if (req.method !== 'POST' || (!isVoice && pathname !== '/api/translate')) {
       if (req.method === 'GET' && config.staticDirectory && !pathname.startsWith('/api/')) {
         const root=resolve(config.staticDirectory);
@@ -114,6 +116,7 @@ export function createTranslationServer(config:ServerConfig, provider:Translatio
     const closed=() => controller.abort();
     res.on('close',closed);active++;
     try {
+      if (pathname==='/api/ocr') {if(!config.vision)throw new TranslationError('OCR_NOT_CONFIGURED','خواندن تصویر تنظیم نشده است.',503);const result=await config.vision.extract(await readBody(req,6*1024*1024),controller.signal);if(!controller.signal.aborted&&!res.destroyed)json(res,200,result);return;}
       if (isVoice) {
         if (!config.voice) throw new TranslationError('VOICE_NOT_CONFIGURED','سرویس صوتی هنوز تنظیم نشده است.',503);
         const input=await readBody(req,pathname==='/api/transcribe' ? 9*1024*1024 : 16384);
@@ -121,7 +124,7 @@ export function createTranslationServer(config:ServerConfig, provider:Translatio
         if (!controller.signal.aborted && !res.destroyed) json(res,200,result);
         return;
       }
-      const request=validateTranslation(await readBody(req));
+      const request=validateTranslation(await readBody(req,65536));
       if(localProviders.includes(request.provider as ProviderId) && config.timeoutMs===undefined){clearTimeout(timer);timer=setTimeout(()=>{timedOut=true;controller.abort();},180000);}
       const providers=config.refreshProviders ? await config.refreshProviders() : config.providers;
       const selected=providers?.[request.provider || 'openai'];

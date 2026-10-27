@@ -15,7 +15,7 @@ async function responseJSON(response:Response,limit=1024*1024) {
   return JSON.parse(Buffer.concat(parts).toString('utf8'));
 }
 function noOptions(request:TranslationRequest) {
-  if(request.context.trim() || request.tone!=='preserve')throw new TranslationError('LOCAL_OPTIONS','این موتور فقط ترجمهٔ مستقیم با حفظ لحن دارد؛ زمینه را خالی و لحن را «حفظ لحن متن» انتخاب کنید.');
+  if(request.context.trim() || request.tone!=='preserve' || request.glossary?.length || request.alternative)throw new TranslationError('LOCAL_OPTIONS','این موتور فقط ترجمهٔ مستقیم با حفظ لحن دارد؛ زمینه، واژه‌نامه و جایگزین در این موتور پشتیبانی نمی‌شوند.');
 }
 export function createOllamaProvider(id:'translategemma'|'qwenlocal',url:string,models:Record<TranslationMode,string>,fetchImpl:typeof fetch=fetch):TranslationProvider {
   const origin=localURL(url);

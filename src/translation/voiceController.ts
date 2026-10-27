@@ -1,5 +1,6 @@
 import {TranslationRequest} from '../../shared/translation';
 import {Transport} from './controller';
+import {inspectFidelity} from './enhancements';
 
 /** Incremental sentence boundaries: never re-speak previously emitted text. */
 export class SentenceBuffer {
@@ -21,7 +22,7 @@ export class SentenceBuffer {
     return result;
   }
 }
-export interface VoiceTurnState {phase:'idle'|'transcribing'|'translating'|'speaking'|'done'|'error';transcript:string;translation:string;error?:string;firstTextMs?:number;firstAudioMs?:number;elapsedMs?:number;}
+export interface VoiceTurnState {phase:'idle'|'transcribing'|'reviewing'|'translating'|'speaking'|'done'|'error';transcript:string;translation:string;error?:string;firstTextMs?:number;firstAudioMs?:number;elapsedMs?:number;pausedForReview?:boolean;}
 export const emptyVoiceState:VoiceTurnState={phase:'idle',transcript:'',translation:''};
 export interface SpeechSession {enqueue(text:string):void;drain():Promise<void>;stop():void;}
 export type SpeechFactory=(signal:AbortSignal,onStart:()=>void)=>SpeechSession;
@@ -29,14 +30,15 @@ export class VoiceTurnController {
   private generation=0;private abort?:AbortController;private speech?:SpeechSession;
   constructor(private transport:Transport,private makeSpeech:SpeechFactory,private publish:(state:VoiceTurnState)=>void) {}
   stop() {this.generation++;this.abort?.abort();this.speech?.stop();}
-  async run(request:Omit<TranslationRequest,'text'>,getTranscript:(signal:AbortSignal)=>Promise<string>) {
+  async run(request:Omit<TranslationRequest,'text'>,getTranscript:(signal:AbortSignal)=>Promise<string>,options:{review?:(text:string,signal:AbortSignal)=>Promise<string>;pauseOnWarnings?:boolean}={}) {
     this.stop();const generation=this.generation;const abort=new AbortController();this.abort=abort;
     const current=()=>generation===this.generation && !abort.signal.aborted;
     const state:VoiceTurnState={phase:'transcribing',transcript:'',translation:''};const started=Date.now();
     const update=()=>{if(current())this.publish({...state});};update();
     const speech=this.makeSpeech(abort.signal,()=>{if(!current())return;state.firstAudioMs ??= Date.now()-started;update();});this.speech=speech;
     try {
-      const text=await getTranscript(abort.signal);if(!current())return;
+      let text=await getTranscript(abort.signal);if(!current())return;
+      if(options.review){state.transcript=text;state.phase='reviewing';update();text=await options.review(text,abort.signal);if(!current())return;}
       if(!text.trim())throw new Error('گفتار قابل‌تشخیصی دریافت نشد.');
       if(text.length>2000)throw new Error('ویس طولانی است؛ آن را به بخش‌های کوتاه‌تر تقسیم کنید.');
       state.transcript=text;state.phase='translating';update();let complete=false;
@@ -48,6 +50,7 @@ export class VoiceTurnController {
         } else if(event.type==='complete') {complete=true;}
       });
       if(!current())return;if(!complete)throw new Error('ترجمه پیش از تکمیل قطع شد.');
+      if(options.pauseOnWarnings&&inspectFidelity(text,state.translation).length){state.pausedForReview=true;state.phase='done';state.elapsedMs=Date.now()-started;update();return;}
       // Wait for the full, successfully completed translation before any audio.
       state.phase='speaking';update();
       for(const sentence of new SentenceBuffer().push(state.translation,true))speech.enqueue(sentence);

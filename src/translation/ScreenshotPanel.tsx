@@ -1,0 +1,21 @@
+import React,{useEffect,useRef,useState} from 'react';
+import {ActivityIndicator,Image,TextInput} from 'react-native';
+import * as DocumentPicker from 'expo-document-picker';
+import {fetch as expoFetch} from 'expo/fetch';
+import {Language,TranslationStatus} from '../../shared/translation';
+import {Button,C,Card,s,T} from '../ui';
+import {normalizeServerUrl} from './client';
+import {readVoiceFile as readLocalFile,removeVoiceTemp} from './voiceFiles';
+export function ScreenshotPanel({url,token,status,language,onUse}:{url:string;token:string;status?:TranslationStatus;language:Language;onUse:(text:string)=>void}) {
+ const [text,setText]=useState(''),[uri,setUri]=useState(''),[busy,setBusy]=useState(false),[error,setError]=useState('');const abort=useRef<AbortController|undefined>(undefined),generation=useRef(0),owned=useRef('');
+ useEffect(()=>()=>{generation.current++;abort.current?.abort();if(owned.current)void removeVoiceTemp(owned.current).catch(()=>{});},[]);
+ useEffect(()=>{generation.current++;abort.current?.abort();setText('');setBusy(false);},[url,token,language]);
+ async function pick(){setError('');setText('');setBusy(true);const id=++generation.current;abort.current?.abort();const controller=new AbortController();abort.current=controller;let timer:ReturnType<typeof setTimeout>|undefined;
+  try{const result=await DocumentPicker.getDocumentAsync({type:['image/jpeg','image/png','image/webp'],copyToCacheDirectory:true,base64:false});if(result.canceled)return;const asset=result.assets[0];if(id!==generation.current){await removeVoiceTemp(asset.uri);return;}if(owned.current)await removeVoiceTemp(owned.current).catch(()=>{});owned.current=asset.uri;setUri(asset.uri);
+   if((asset.size || 0)>4*1024*1024)throw new Error('حداکثر حجم تصویر ۴ مگابایت است.');const image=await readLocalFile(asset.uri);if(image.size>4*1024*1024)throw new Error('حداکثر حجم تصویر ۴ مگابایت است.');
+   const extension=asset.name.split('.').pop()?.toLowerCase();const mimeType=asset.mimeType || (extension==='png'?'image/png':extension==='webp'?'image/webp':'image/jpeg');
+   timer=setTimeout(()=>controller.abort(),45000);const response=await expoFetch(`${normalizeServerUrl(url)}/api/ocr`,{method:'POST',signal:controller.signal,headers:{'Content-Type':'application/json',...(token?{Authorization:`Bearer ${token}`}:{})},body:JSON.stringify({language,mimeType,imageBase64:image.base64})});const data=await response.json();if(!response.ok)throw new Error(data.message || 'خواندن تصویر انجام نشد.');if(typeof data.text!=='string')throw new Error('متن دریافتی معتبر نیست.');if(id===generation.current)setText(data.text);
+  }catch(e){if(id===generation.current)setError(controller.signal.aborted?'خواندن تصویر لغو شد یا زمان انتظار تمام شد.':e instanceof Error?e.message:'خواندن تصویر انجام نشد.');}finally{clearTimeout(timer);if(id===generation.current)setBusy(false);}
+ }
+ return <Card><T style={s.subtitle}>ترجمهٔ اسکرین‌شات و تصویر</T><T style={s.muted}>فقط تصویر انتخاب‌شدهٔ شما برای خواندن متن به Gemini ارسال می‌شود؛ کلید و سهمیهٔ جدا از ترجمهٔ متن لازم است. پیش از انتقال به ترجمه، متن خوانده‌شده را اصلاح کنید.</T><T style={s.muted}>{status?.vision?.configured?'کلید خواندن تصویر تنظیم شده است.':'برای فعال‌سازی، GEMINI_API_KEY را در .env تنظیم کنید.'}</T><Button title={busy?'در حال خواندن تصویر…':'انتخاب اسکرین‌شات یا تصویر'} icon="image-outline" disabled={!status?.vision?.configured||busy} onPress={()=>void pick()}/>{busy&&<><ActivityIndicator color={C.green}/><Button secondary small title="لغو خواندن تصویر" onPress={()=>abort.current?.abort()}/></>}{!!uri&&<Image source={{uri}} resizeMode="contain" accessibilityLabel="تصویر انتخاب‌شده برای خواندن متن" style={{height:180,width:'100%',borderRadius:12}}/>}{!!text&&<><TextInput accessibilityLabel="متن خوانده‌شده از تصویر" value={text} onChangeText={setText} multiline maxLength={6000} style={[s.input,{minHeight:140,textAlign:language==='fa'?'right':'left'}]}/><T style={s.muted}>برای ترجمه تا ۲۰۰۰ نویسه انتخاب کنید؛ متن طولانی خودکار بریده نمی‌شود.</T><Button title="استفاده از متن تصویر برای ترجمه" disabled={!text.trim()||text.length>2000||busy} onPress={()=>onUse(text)}/></>}{!!error&&<T accessibilityRole="alert" style={{color:C.danger}}>{error}</T>}</Card>;
+}

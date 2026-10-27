@@ -6,7 +6,7 @@ interface Entry {text:string;complete:Extract<TranslationEvent,{type:'complete'}
 export function createTranslationMemory(base:Transport,options:{ttlMs?:number;maxEntries?:number;maxChars?:number;now?:()=>number}={}) {
   const entries=new Map<string,Entry>();let chars=0;const now=options.now || Date.now;
   const ttlMs=options.ttlMs ?? 120000,maxEntries=options.maxEntries ?? 32,maxChars=options.maxChars ?? 64000;
-  const key=(r:TranslationRequest)=>JSON.stringify([r.provider || 'openai',r.source,r.target,r.mode,r.tone,r.context,r.text]);
+  const key=(r:TranslationRequest)=>JSON.stringify([r.provider || 'openai',r.source,r.target,r.mode,r.tone,r.context,r.text,r.glossary || [],r.alternative || null]);
   function remove(k:string) {const entry=entries.get(k);if(entry)chars-=entry.size;entries.delete(k);}
   function clear() {entries.clear();chars=0;}
   const transport:Transport=async(request,signal,emit)=>{

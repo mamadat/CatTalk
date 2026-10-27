@@ -6,6 +6,13 @@ import {checkTranslationServer,createTranslationTransport,normalizeServerUrl} fr
 import {ChatPanel,SharedChatText} from '../messaging/ChatPanel';
 import {VoicePanel} from './VoicePanel';
 import {emptyLiveState,LiveTranslationController} from './controller';
+import {useTranslationPreferences} from './preferences';
+import {enrichRequest} from './enhancements';
+import {GlossaryPanel} from './GlossaryPanel';
+import {QualityReview} from './QualityReview';
+import {Alternatives} from './Alternatives';
+import {ScreenshotPanel} from './ScreenshotPanel';
+import {Transport} from './controller';
 import {createTranslationMemory} from './memory';
 
 function defaultUrl() {
@@ -17,7 +24,7 @@ function defaultUrl() {
   return '';
 }
 export function TranslatorScreen({sharedChat,onSharedHandled}:{sharedChat?:SharedChatText;onSharedHandled?:()=>void}={}) {
-  const [inputMode,setInputMode]=useState<'text'|'voice'|'chat'>('text');
+  const [inputMode,setInputMode]=useState<'text'|'voice'|'chat'|'image'>('text');
   const [provider,setProvider]=useState<ProviderId>('gemini');
   const [text,setText]=useState('');const [source,setSource]=useState<Language>('fa');
   const target:Language=source === 'fa' ? 'ja' : 'fa';
@@ -30,8 +37,9 @@ export function TranslatorScreen({sharedChat,onSharedHandled}:{sharedChat?:Share
   const [memoryEnabled,setMemoryEnabled]=useState(true);
   const inputRef=useRef<TextInput>(null);
   useEffect(()=>{if(sharedChat)setInputMode('chat');},[sharedChat?.id]);
+  const preferences=useTranslationPreferences();
   const revision=JSON.stringify([status?.promptVersion,status?.providers,status?.models]);
-  const transport=useMemo(()=>{const wire=createTranslationTransport(url,token);return memoryEnabled?createTranslationMemory(wire).transport:wire;},[url,token,revision,memoryEnabled]);
+  const transport=useMemo<Transport>(()=>{const wire=createTranslationTransport(url,token);const base=memoryEnabled?createTranslationMemory(wire).transport:wire;return (request,signal,emit)=>base(enrichRequest(request,preferences.data.terms),signal,emit);},[url,token,revision,memoryEnabled,preferences.data.terms]);
   const controller=useMemo(() => new LiveTranslationController(transport,setLive),[transport]);
   useEffect(() => () => controller.dispose(),[controller]);
   useEffect(() => {
@@ -89,8 +97,8 @@ export function TranslatorScreen({sharedChat,onSharedHandled}:{sharedChat?:Share
       <Pressable accessibilityRole="button" accessibilityLabel="جابه‌جایی زبان‌ها" style={ts.swap} onPress={swap}><Icon name="swap-horizontal" color={C.green}/></Pressable>
       <View style={{flex:1,alignItems:'center'}}><T style={ts.language}>{languageNames[target]}</T><T style={s.muted}>ترجمه</T></View>
     </View>
-    <Chips options={{text:'ترجمهٔ متن',voice:'ترجمهٔ صوتی',chat:'مترجم چت'}} value={inputMode} onChange={setInputMode}/>
-    {inputMode === 'chat' ? <ChatPanel url={url} token={token} request={request} ready={ready} transport={transport} shared={sharedChat} onHandled={onSharedHandled}/> : inputMode === 'voice' ? <VoicePanel url={url} token={token} status={status} request={request} ready={ready} transport={transport}/> : <>
+    <Chips options={{text:'ترجمهٔ متن',voice:'ترجمهٔ صوتی',chat:'مترجم چت',image:'تصویر و اسکرین‌شات'}} value={inputMode} onChange={setInputMode}/>
+    {inputMode === 'image' ? <ScreenshotPanel url={url} token={token} status={status} language={source} onUse={value=>{setText(value);setInputMode('text');}}/> : inputMode === 'chat' ? <ChatPanel url={url} token={token} request={request} ready={ready} transport={transport} preferences={preferences} shared={sharedChat} onHandled={onSharedHandled}/> : inputMode === 'voice' ? <VoicePanel url={url} token={token} status={status} request={request} ready={ready} transport={transport}/> : <>
     <Card style={{padding:17}}>
       <View style={s.between}><T style={{fontWeight:'700'}}>{languageNames[source]}</T><Pressable accessibilityRole="button" accessibilityLabel="پاک‌کردن متن" onPress={() => changeText('')} hitSlop={10}><Icon name="close-circle-outline" color={C.muted}/></Pressable></View>
       <TextInput ref={inputRef} accessibilityLabel="متن برای ترجمه" value={text} onChangeText={changeText} multiline maxLength={MAX_TEXT_LENGTH} autoCorrect={false} placeholder={source === 'fa' ? 'متن فارسی را اینجا بنویس…' : '日本語を入力してください…'} placeholderTextColor="#9AA69F" style={[s.input,ts.editor,{textAlign:source === 'fa' ? 'right' : 'left',writingDirection:source === 'fa' ? 'rtl' : 'ltr'}]}/>
@@ -102,10 +110,14 @@ export function TranslatorScreen({sharedChat,onSharedHandled}:{sharedChat?:Share
       {live.phase === 'error' && <T accessibilityRole="alert" style={{color:C.danger,fontSize:13}}>{live.error}</T>}
       {live.phase === 'translating' && live.text ? <T style={{fontSize:11,color:C.muted}}>در حال دریافت؛ متن هنوز کامل نشده است.</T> : null}
       {live.phase === 'done' && <><View style={s.divider}/><T style={{fontSize:11,color:C.muted}}>{live.model} · زمان دریافت {((live.elapsedMs || 0)/1000).toLocaleString('fa-IR',{maximumFractionDigits:1})} ثانیه</T><Button secondary small title={Platform.OS === 'web' ? 'کپی ترجمه' : 'اشتراک ترجمه'} icon="copy-outline" onPress={() => void copy()}/></>}
-      {!!copyMessage && <T style={s.muted}>{copyMessage}</T>}
+      {live.phase==='done'&&<QualityReview source={text} target={live.text}/>}
+    {!!copyMessage && <T style={s.muted}>{copyMessage}</T>}
     </Card>
     <Button title={live.phase === 'error' ? 'تلاش دوباره' : auto ? 'ترجمهٔ همین متن' : 'ترجمه کن'} icon="language-outline" disabled={!ready || !text.trim() || composing || ['waiting','translating'].includes(live.phase)} onPress={() => controller.update(request,true,true)}/>
+    {live.phase==='done'&&<Alternatives request={request} result={live.text} transport={transport} onChoose={value=>{controller.update(null);setLive({...live,phase:'done',text:value});}}/>}
     </>}
+    <GlossaryPanel preferences={preferences}/>
+    {!supportsOptions&&preferences.data.terms.length>0&&<T style={s.muted}>واژه‌نامه، زمینه و پیشنهاد جایگزین روی موتور انتخابی فعال نیستند؛ موتور سازگار دیگری مثل Qwen یا یکی از سرویس‌های ابری انتخاب کنید.</T>}
     <View style={s.row}><Switch accessibilityLabel="استفاده از حافظهٔ موقت ترجمه" value={memoryEnabled} onValueChange={setMemoryEnabled}/><View style={{flex:1}}><T style={s.muted}>ترجمه‌های کاملاً یکسان تا ۲ دقیقه در حافظهٔ همین جلسه دوباره استفاده شوند.</T></View></View>
     <T style={{fontSize:11,color:C.muted}}>فقط پاسخ کامل با همان زبان، لحن، زمینه و مدل؛ بدون ذخیره در فایل. با خاموش‌کردن، ترجمهٔ تازه درخواست می‌شود.</T>
     <Pressable accessibilityRole="button" onPress={() => setAdvanced(!advanced)} style={s.between}><T style={{fontWeight:'700'}}>لحن و کیفیت ترجمه</T><Icon name={advanced ? 'chevron-up' : 'chevron-down'} size={18}/></Pressable>
