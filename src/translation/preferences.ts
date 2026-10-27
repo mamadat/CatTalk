@@ -2,12 +2,14 @@ import {useCallback,useEffect,useRef,useState} from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {ContactProfile,GlossaryTerm} from './enhancements';
 import {toneNames} from '../../shared/translation';
+import {SavedPhrase,validSavedPhrase} from './travel';
 const KEY='cattalk.translation.preferences.v1';
-export interface TranslationPreferences {version:1;terms:GlossaryTerm[];profiles:ContactProfile[];}
+export interface TranslationPreferences {version:1;terms:GlossaryTerm[];profiles:ContactProfile[];saved?:SavedPhrase[];}
 export const emptyPreferences:TranslationPreferences={version:1,terms:[],profiles:[]};
 export function validatePreferences(value:unknown):TranslationPreferences {
  const v=value as TranslationPreferences;
  if(!v||v.version!==1||!Array.isArray(v.terms)||v.terms.length>200||!Array.isArray(v.profiles)||v.profiles.length>50)throw new Error('تنظیمات ترجمه قابل خواندن نیست؛ دادهٔ قبلی بازنویسی نشده است.');
+ if(v.saved!==undefined&&(!Array.isArray(v.saved)||v.saved.length>100||v.saved.some(p=>!validSavedPhrase(p))))throw new Error('عبارت‌های ذخیره‌شده معتبر نیستند.');
  for(const term of v.terms)if(!term||typeof term.id!=='string'||!['fa','ja'].includes(term.sourceLanguage)||!['fa','ja'].includes(term.targetLanguage)||term.sourceLanguage===term.targetLanguage||typeof term.source!=='string'||!term.source.trim()||term.source.length>80||typeof term.target!=='string'||!term.target.trim()||term.target.length>80)throw new Error('واژه‌نامهٔ ذخیره‌شده معتبر نیست.');
  for(const p of v.profiles)if(!p||typeof p.id!=='string'||p.id.length>256||typeof p.name!=='string'||!p.name.trim()||p.name.length>80||!Object.hasOwn(toneNames,p.tone)||typeof p.contextEnabled!=='boolean')throw new Error('پروفایل مخاطب معتبر نیست.');
  return v;

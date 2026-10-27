@@ -12,6 +12,9 @@ import {GlossaryPanel} from './GlossaryPanel';
 import {QualityReview} from './QualityReview';
 import {Alternatives} from './Alternatives';
 import {ScreenshotPanel} from './ScreenshotPanel';
+import {TravelPanel} from './TravelPanel';
+import {SessionPanel} from './SessionPanel';
+import {SavePhraseButton} from './SavePhraseButton';
 import {Transport} from './controller';
 import {createTranslationMemory} from './memory';
 
@@ -24,7 +27,7 @@ function defaultUrl() {
   return '';
 }
 export function TranslatorScreen({sharedChat,onSharedHandled}:{sharedChat?:SharedChatText;onSharedHandled?:()=>void}={}) {
-  const [inputMode,setInputMode]=useState<'text'|'voice'|'chat'|'image'>('text');
+  const [inputMode,setInputMode]=useState<'text'|'voice'|'chat'|'image'|'travel'|'session'>('text');
   const [provider,setProvider]=useState<ProviderId>('gemini');
   const [text,setText]=useState('');const [source,setSource]=useState<Language>('fa');
   const target:Language=source === 'fa' ? 'ja' : 'fa';
@@ -97,8 +100,8 @@ export function TranslatorScreen({sharedChat,onSharedHandled}:{sharedChat?:Share
       <Pressable accessibilityRole="button" accessibilityLabel="جابه‌جایی زبان‌ها" style={ts.swap} onPress={swap}><Icon name="swap-horizontal" color={C.green}/></Pressable>
       <View style={{flex:1,alignItems:'center'}}><T style={ts.language}>{languageNames[target]}</T><T style={s.muted}>ترجمه</T></View>
     </View>
-    <Chips options={{text:'ترجمهٔ متن',voice:'ترجمهٔ صوتی',chat:'مترجم چت',image:'تصویر و اسکرین‌شات'}} value={inputMode} onChange={setInputMode}/>
-    {inputMode === 'image' ? <ScreenshotPanel url={url} token={token} status={status} language={source} onUse={value=>{setText(value);setInputMode('text');}}/> : inputMode === 'chat' ? <ChatPanel url={url} token={token} request={request} ready={ready} transport={transport} preferences={preferences} shared={sharedChat} onHandled={onSharedHandled}/> : inputMode === 'voice' ? <VoicePanel url={url} token={token} status={status} request={request} ready={ready} transport={transport}/> : <>
+    <Chips options={{text:'ترجمهٔ متن',voice:'ترجمهٔ صوتی',chat:'مترجم چت',image:'تصویر و اسکرین‌شات',travel:'همراه سفر',session:'جلسه و زیرنویس'}} value={inputMode} onChange={setInputMode}/>
+    {inputMode === 'travel' ? <TravelPanel preferences={preferences} language={source} onUse={(value,language)=>{controller.update(null);setSource(language);setText(value);setInputMode('text');}}/> : inputMode === 'session' ? <SessionPanel url={url} token={token} request={request} status={status} ready={ready} transport={transport} preferences={preferences}/> : inputMode === 'image' ? <ScreenshotPanel url={url} token={token} status={status} language={source} onUse={value=>{setText(value);setInputMode('text');}}/> : inputMode === 'chat' ? <ChatPanel url={url} token={token} request={request} ready={ready} transport={transport} preferences={preferences} shared={sharedChat} onHandled={onSharedHandled}/> : inputMode === 'voice' ? <VoicePanel url={url} token={token} status={status} request={request} ready={ready} transport={transport} preferences={preferences} onDirectionChange={value=>{controller.update(null);setSource(value);}}/> : <>
     <Card style={{padding:17}}>
       <View style={s.between}><T style={{fontWeight:'700'}}>{languageNames[source]}</T><Pressable accessibilityRole="button" accessibilityLabel="پاک‌کردن متن" onPress={() => changeText('')} hitSlop={10}><Icon name="close-circle-outline" color={C.muted}/></Pressable></View>
       <TextInput ref={inputRef} accessibilityLabel="متن برای ترجمه" value={text} onChangeText={changeText} multiline maxLength={MAX_TEXT_LENGTH} autoCorrect={false} placeholder={source === 'fa' ? 'متن فارسی را اینجا بنویس…' : '日本語を入力してください…'} placeholderTextColor="#9AA69F" style={[s.input,ts.editor,{textAlign:source === 'fa' ? 'right' : 'left',writingDirection:source === 'fa' ? 'rtl' : 'ltr'}]}/>
@@ -110,7 +113,7 @@ export function TranslatorScreen({sharedChat,onSharedHandled}:{sharedChat?:Share
       {live.phase === 'error' && <T accessibilityRole="alert" style={{color:C.danger,fontSize:13}}>{live.error}</T>}
       {live.phase === 'translating' && live.text ? <T style={{fontSize:11,color:C.muted}}>در حال دریافت؛ متن هنوز کامل نشده است.</T> : null}
       {live.phase === 'done' && <><View style={s.divider}/><T style={{fontSize:11,color:C.muted}}>{live.model} · زمان دریافت {((live.elapsedMs || 0)/1000).toLocaleString('fa-IR',{maximumFractionDigits:1})} ثانیه</T><Button secondary small title={Platform.OS === 'web' ? 'کپی ترجمه' : 'اشتراک ترجمه'} icon="copy-outline" onPress={() => void copy()}/></>}
-      {live.phase==='done'&&<QualityReview source={text} target={live.text}/>}
+      {live.phase==='done'&&<><QualityReview source={text} target={live.text}/><SavePhraseButton preferences={preferences} source={source} target={target} original={text} translated={live.text}/></>}
     {!!copyMessage && <T style={s.muted}>{copyMessage}</T>}
     </Card>
     <Button title={live.phase === 'error' ? 'تلاش دوباره' : auto ? 'ترجمهٔ همین متن' : 'ترجمه کن'} icon="language-outline" disabled={!ready || !text.trim() || composing || ['waiting','translating'].includes(live.phase)} onPress={() => controller.update(request,true,true)}/>

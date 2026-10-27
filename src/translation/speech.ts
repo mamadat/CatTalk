@@ -22,7 +22,7 @@ export async function deviceVoice(language:Language) {
   const voices=await Speech.getAvailableVoicesAsync();
   return voices.find(v=>v.language.toLowerCase().replace('_','-').startsWith(language));
 }
-export function createSpeechSession(options:{engine:VoiceEngine;language:Language;url:string;token:string;enabled:boolean},signal:AbortSignal,onStart:()=>void):SpeechSession {
+export function createSpeechSession(options:{engine:VoiceEngine;language:Language;url:string;token:string;enabled:boolean;rate?:number},signal:AbortSignal,onStart:()=>void):SpeechSession {
   let chain=Promise.resolve();let failure:unknown;let stopped=false;let cancelPlayback:(()=>void)|undefined;
   const voice=options.engine==='device' && options.enabled ? deviceVoice(options.language).catch(()=>undefined) : Promise.resolve(undefined);
   // Errors remain observed even when a stream aborts before drain().
@@ -37,7 +37,7 @@ export function createSpeechSession(options:{engine:VoiceEngine;language:Languag
         let settled=false;const timer=setTimeout(()=>{void Speech.stop();finish(new Error('پخش صدای دستگاه متوقف شد؛ پخش دوباره را امتحان کنید.'));},60000);
         const finish=(error?:Error)=>{if(settled)return;settled=true;clearTimeout(timer);cancelPlayback=undefined;error?reject(error):resolve();};
         cancelPlayback=()=>{void Speech.stop();finish();};
-        Speech.speak(text,{language:options.language==='fa'?'fa-IR':'ja-JP',voice:selected.identifier,rate:1,onStart,onDone:()=>finish(),onStopped:()=>finish(),onError:()=>finish(new Error('پخش صدای دستگاه ناموفق بود؛ پخش دوباره یا صدای Gemini را امتحان کنید.'))});
+        Speech.speak(text,{language:options.language==='fa'?'fa-IR':'ja-JP',voice:selected.identifier,rate:options.rate??1,onStart,onDone:()=>finish(),onStopped:()=>finish(),onError:()=>finish(new Error('پخش صدای دستگاه ناموفق بود؛ پخش دوباره یا صدای Gemini را امتحان کنید.'))});
       });
     } else {
       const base64=await requestSpeech(options.url,options.token,text,options.language,signal);
@@ -49,7 +49,7 @@ export function createSpeechSession(options:{engine:VoiceEngine;language:Languag
           const finish=(error?:Error)=>{if(settled)return;settled=true;clearTimeout(timer);cancelPlayback=undefined;error?reject(error):resolve();};
           cancelPlayback=()=>{player.pause();finish();};
           sub=player.addListener('playbackStatusUpdate',status=>{if(status.playing&&!started){started=true;onStart();}if(status.didJustFinish)finish();});
-          if(stopped || signal.aborted)finish();else player.play();
+          if(stopped || signal.aborted)finish();else {player.setPlaybackRate(options.rate??1);player.play();}
         });
       } finally {sub?.remove();player.remove();file.dispose();}
     }

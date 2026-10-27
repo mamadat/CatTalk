@@ -1,2 +1,3 @@
 import {Language} from '../../shared/translation';
-export interface MicrophoneProps {language:Language;disabled:boolean;audioReady:boolean;onAudio:(uri:string,mimeType:string)=>Promise<void>;onCancel:()=>void;onError:(message:string)=>void;onActiveChange:(active:boolean)=>void;}
+export interface CaptureTiming {startedAt:number;endedAt:number;}
+export interface MicrophoneProps {language:Language;disabled:boolean;audioReady:boolean;continuous?:boolean;onAudio:(uri:string,mimeType:string,timing?:CaptureTiming)=>Promise<void>;onCancel:(reason?:'start'|'stop')=>void;onError:(message:string)=>void;onActiveChange:(active:boolean)=>void;}
