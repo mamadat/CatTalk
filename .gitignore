@@ -9,3 +9,6 @@ web-build/
 !.env.example
 android/
 ios/
+.local/
+__pycache__/
+*.pyc

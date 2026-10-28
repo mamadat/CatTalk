@@ -37,7 +37,7 @@ export function Microphone(props:MicrophoneProps) {
   useEffect(()=>{if(!state.isRecording || !recording.current || !vad.current)return;const decision=vad.current.update(state.metering ?? -100,Date.now());if(decision!=='wait')actions.current.finish(decision==='speech');},[state.durationMillis,state.isRecording,state.metering]);
   async function start() {
     latest.current.onCancel('start');
-    if(!props.audioReady){latest.current.onError('ابتدا کلید سرویس تشخیص گفتار انتخاب‌شده را در سرور تنظیم کنید.');return;}
+    if(!props.audioReady){latest.current.onError('ابتدا موتور تشخیص گفتار انتخابی را آماده کنید؛ موتور محلی به نصب مدل نیاز دارد.');return;}
     const permission=await AudioModule.requestRecordingPermissionsAsync();if(!permission.granted){latest.current.onError('دسترسی میکروفون را در تنظیمات دستگاه فعال کنید.');return;}
     wanted.current=true;const id=++generation.current;setActive(true);latest.current.onActiveChange(true);await listen(id);
   }

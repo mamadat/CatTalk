@@ -1,7 +1,10 @@
 import {MAX_AUDIO_BYTES,VoiceCapabilities,audioTypes,validateAudio,validateSpeech} from '../shared/voice';
 import {MAX_TEXT_LENGTH,TranslationError} from '../shared/translation';
+import {PythonWhisper,LocalTranscriber} from './localVoice';
 
 export interface VoiceService {
+  refreshCapabilities?:()=>Promise<VoiceCapabilities>;
+  dispose?:()=>void;
   capabilities:VoiceCapabilities;
   transcribe:(input:unknown,signal:AbortSignal)=>Promise<{text:string;model:string}>;
   speech:(input:unknown,signal:AbortSignal)=>Promise<{audioBase64:string;mimeType:string}>;
@@ -23,13 +26,15 @@ async function limitedJSON(response:Response,limit:number) {
   try {while(true) {const item=await reader.read();if(item.done)break;size+=item.value.byteLength;if(size>limit)throw new TranslationError('VOICE_TOO_LONG','خروجی صوتی بیش از حد طولانی شد.',502);parts.push(item.value);}} finally {await reader.cancel().catch(()=>{});reader.releaseLock();}
   return JSON.parse(Buffer.concat(parts).toString('utf8'));
 }
-export function createVoiceService(env:Record<string,string|undefined>,fetchImpl:typeof fetch=fetch):VoiceService {
+export function createVoiceService(env:Record<string,string|undefined>,fetchImpl:typeof fetch=fetch,local:LocalTranscriber=new PythonWhisper(env)):VoiceService {
   const groqKey=env.GROQ_API_KEY?.trim() || '',geminiKey=env.GEMINI_API_KEY?.trim() || '';
   const groqModel=env.GROQ_STT_MODEL || 'whisper-large-v3-turbo',geminiModel=env.GEMINI_STT_MODEL || 'gemini-3.8-flash',speechModel=env.GEMINI_TTS_MODEL || 'gemini-3.8-flash-tts';
   const qualityModel=env.GROQ_STT_QUALITY_MODEL || 'whisper-large-v3';
-  const capabilities:VoiceCapabilities={transcription:{groq:{configured:!!groqKey,model:groqModel,qualityModel},gemini:{configured:!!geminiKey,model:geminiModel}},speech:{gemini:{configured:!!geminiKey,model:speechModel}}};
+  const capabilities:VoiceCapabilities={transcription:{whisperlocal:local.status,groq:{configured:!!groqKey,model:groqModel,qualityModel},gemini:{configured:!!geminiKey,model:geminiModel}},speech:{gemini:{configured:!!geminiKey,model:speechModel}}};
   async function transcribe(input:unknown,signal:AbortSignal) {
-    const request=validateAudio(input);const key=request.provider==='groq' ? groqKey : geminiKey;
+    const request=validateAudio(input);
+    if(request.provider==='whisperlocal')return local.transcribe(request,signal);
+    const key=request.provider==='groq' ? groqKey : geminiKey;
     if (!key) throw new TranslationError('VOICE_NOT_CONFIGURED','کلید سرویس تشخیص گفتار انتخاب‌شده را در .env تنظیم کنید.',503);
     const bytes=Buffer.from(request.audioBase64,'base64');if(bytes.length>MAX_AUDIO_BYTES)throw new TranslationError('AUDIO_SIZE','حداکثر حجم صدا ۶ مگابایت است.',413);
     let text:string,model:string;
@@ -61,5 +66,5 @@ export function createVoiceService(env:Record<string,string|undefined>,fetchImpl
     if(typeof audio?.data!=='string' || !audio.data.length || (audio.mime_type && audio.mime_type!=='audio/wav'))throw new TranslationError('NO_SPEECH_AUDIO','صدای معتبر از سرویس دریافت نشد.',502);
     return {audioBase64:audio.data,mimeType:'audio/wav'};
   }
-  return {capabilities,transcribe,speech};
+  return {capabilities,transcribe,speech,async refreshCapabilities(){capabilities.transcription.whisperlocal=await local.refresh();return capabilities;},dispose:()=>local.dispose()};
 }

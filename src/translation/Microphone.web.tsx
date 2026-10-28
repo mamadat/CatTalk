@@ -24,7 +24,7 @@ export function Microphone(props:MicrophoneProps) {
   async function listen(id:number) {
     if(!wanted.current || id!==generation.current)return;
     setPhase('گوش می‌دهم… پس از ۳ ثانیه سکوت ترجمه می‌کنم');
-    if(!latest.current.audioReady){fail('برای ترجمهٔ کل گفتار، کلید سرویس تشخیص گفتار انتخابی را در .env تنظیم کنید.');return;}
+    if(!latest.current.audioReady){fail('ابتدا موتور تشخیص گفتار انتخابی را آماده کنید؛ موتور محلی به نصب مدل نیاز دارد.');return;}
     let openedStream:MediaStream|undefined,openedContext:AudioContext|undefined;
     try {
       const stream=await navigator.mediaDevices.getUserMedia({audio:{channelCount:1,echoCancellation:true,noiseSuppression:true,autoGainControl:true}});

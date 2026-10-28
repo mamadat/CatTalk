@@ -48,7 +48,7 @@ async function readBody(req:IncomingMessage,limit=16384) {
 export function createTranslationServer(config:ServerConfig, provider:TranslationProvider) {
   let active=0;
   const rates=new Map<string,{count:number;reset:number}>();
-  return createServer(async (req,res) => {
+  const server=createServer(async (req,res) => {
     res.setHeader('X-Content-Type-Options','nosniff');
     const origin=req.headers.origin;
     if (origin) {
@@ -86,7 +86,8 @@ export function createTranslationServer(config:ServerConfig, provider:Translatio
     if (req.method === 'GET' && pathname === '/api/translation/status') {
       if (!authenticated(req,config.accessToken)) {json(res,401,{code:'UNAUTHORIZED',message:'توکن اتصال به سرور درست نیست.'});return;}
       const providers=config.refreshProviders ? await config.refreshProviders() : config.providers;
-      json(res,200,{service:'cattalk-translation',configured:providers ? Object.values(providers).some(v=>v.configured) : config.configured,requiresToken:!!config.accessToken,models:config.models,providers,voice:config.voice?.capabilities,vision:config.vision?.status,promptVersion:PROMPT_VERSION});return;
+      const voice=config.voice?.refreshCapabilities?await config.voice.refreshCapabilities():config.voice?.capabilities;
+      json(res,200,{service:'cattalk-translation',configured:providers ? Object.values(providers).some(v=>v.configured) : config.configured,requiresToken:!!config.accessToken,models:config.models,providers,voice,vision:config.vision?.status,promptVersion:PROMPT_VERSION});return;
     }
     const isVoice=['/api/transcribe','/api/speech','/api/ocr'].includes(pathname);
     if (req.method !== 'POST' || (!isVoice && pathname !== '/api/translate')) {
@@ -120,6 +121,7 @@ export function createTranslationServer(config:ServerConfig, provider:Translatio
       if (isVoice) {
         if (!config.voice) throw new TranslationError('VOICE_NOT_CONFIGURED','سرویس صوتی هنوز تنظیم نشده است.',503);
         const input=await readBody(req,pathname==='/api/transcribe' ? 9*1024*1024 : 16384);
+        if(pathname==='/api/transcribe'&&input?.provider==='whisperlocal'&&config.timeoutMs===undefined){clearTimeout(timer);timer=setTimeout(()=>{timedOut=true;controller.abort();},330000);}
         const result=pathname==='/api/transcribe' ? await config.voice.transcribe(input,controller.signal) : await config.voice.speech(input,controller.signal);
         if (!controller.signal.aborted && !res.destroyed) json(res,200,result);
         return;
@@ -144,4 +146,6 @@ export function createTranslationServer(config:ServerConfig, provider:Translatio
       }
     } finally {clearTimeout(timer);res.off('close',closed);active--;if (!res.destroyed && !res.writableEnded) res.end();}
   });
+  server.on('close',()=>config.voice?.dispose?.());
+  return server;
 }

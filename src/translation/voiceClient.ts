@@ -4,7 +4,8 @@ import {TranscribeRequest} from '../../shared/voice';
 import {normalizeServerUrl} from './client';
 export async function voicePost(url:string,token:string,path:'transcribe'|'speech',body:unknown,signal:AbortSignal):Promise<any> {
   const timeout=new AbortController();const cancel=()=>timeout.abort();signal.addEventListener('abort',cancel,{once:true});if(signal.aborted)cancel();
-  const timer=setTimeout(cancel,45000);
+  const isLocal=path==='transcribe'&&(body as TranscribeRequest)?.provider==='whisperlocal';
+  const timer=setTimeout(cancel,isLocal?335000:45000);
   try {
     const response=await expoFetch(`${normalizeServerUrl(url)}/api/${path}`,{method:'POST',signal:timeout.signal,headers:{'Content-Type':'application/json',...(token?{Authorization:`Bearer ${token}`}:{})},body:JSON.stringify(body)});
     const data=await response.json();if(!response.ok)throw new Error(data.message || 'پردازش صوتی انجام نشد.');return data;
