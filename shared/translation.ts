@@ -1,7 +1,7 @@
 export type Language = 'fa' | 'ja';
 export type TranslationMode = 'balanced' | 'quality' | 'fast';
 export type TranslationTone = 'preserve' | 'polite' | 'casual';
-export const providerNames = {translategemma:'TranslateGemma محلی',qwenlocal:'Qwen محلی',libretranslate:'LibreTranslate محلی',gemini:'Google Gemini',groq:'Groq',openrouter:'OpenRouter Free',openai:'OpenAI'} as const;
+export const providerNames = {translategemma:'TranslateGemma محلی',qwenlocal:'Qwen محلی',libretranslate:'LibreTranslate محلی',gemini:'Google Gemini',groq:'Groq',openrouter:'OpenRouter Free',openai:'ChatGPT / OpenAI'} as const;
 export type ProviderId = keyof typeof providerNames;
 export const localProviders:ProviderId[]=['translategemma','qwenlocal','libretranslate'];
 export const providerSupportsOptions=(id:ProviderId)=>!['translategemma','libretranslate'].includes(id);

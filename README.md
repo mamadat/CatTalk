@@ -97,7 +97,9 @@ npx eas-cli build --platform android --profile preview
 
 ## سرویس‌های جایگزین ترجمه
 
-در صفحهٔ ترجمه بین Google Gemini، Groq، OpenRouter Free و OpenAI سوییچ کنید. سه گزینهٔ اول سهمیه/مسیر رایگان محدود دارند؛ کلید حساب همچنان لازم است. جای `GEMINI_API_KEY`، `GROQ_API_KEY` و `OPENROUTER_API_KEY` در `.env` آماده شده است. فقط کلید سرویس دلخواه را تنظیم و سرور را دوباره اجرا کنید. [راهنما و منابع رسمی](docs/TRANSLATION.md).
+در صفحهٔ ترجمه بین Google Gemini، Groq، OpenRouter Free و ChatGPT / OpenAI سوییچ کنید. سه گزینهٔ اول سهمیه/مسیر رایگان محدود دارند؛ کلید حساب همچنان لازم است. جای `GEMINI_API_KEY`، `GROQ_API_KEY` و `OPENROUTER_API_KEY` در `.env` آماده شده است. فقط کلید سرویس دلخواه را تنظیم و سرور را دوباره اجرا کنید. [راهنما و منابع رسمی](docs/TRANSLATION.md).
+
+گزینهٔ **ChatGPT / OpenAI** با `OPENAI_API_KEY` به API رسمی متصل است و داخل برنامه راهنمای ساخت کلید دارد. API هزینهٔ جدا از اشتراک ChatGPT دارد؛ ایران در فهرست رسمی کشورهای پشتیبانی‌شده نیست. [راهنمای راه‌اندازی و محدودهٔ قابلیت‌ها](docs/OPENAI_SETUP.md).
 
 ## ترجمهٔ صوتی فارسی ↔ ژاپنی
 

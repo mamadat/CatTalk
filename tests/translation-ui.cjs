@@ -9,7 +9,7 @@ async function run() {
   const browser=await pw.chromium.launch({headless:true,...(existsSync(chrome)?{executablePath:chrome}:{})});
   const page=await browser.newPage({viewport:{width:390,height:844}});
   const errors=[];page.on('pageerror',e=>errors.push(e.message));
-  const requests=[];
+  const requests=[];let openaiConfigured=false;
   const url=process.env.CATTALK_URL || 'http://localhost:8787';
   try {
     await page.goto(url);
@@ -20,7 +20,7 @@ async function run() {
     assert.equal(await page.getByRole('button',{name:'ترجمهٔ همین متن',exact:true}).isDisabled(),true);
     mkdirSync('artifacts',{recursive:true});
     await page.screenshot({path:'artifacts/translation-unconfigured.png',fullPage:true});
-    await page.route('**/api/translation/status',route=>route.fulfill({json:{service:'cattalk-translation',configured:true,requiresToken:false,models:{balanced:'fixture',quality:'fixture',fast:'fixture'},promptVersion:'test-only',providers:Object.fromEntries(['gemini','groq','openrouter','openai','translategemma','qwenlocal','libretranslate'].map(id=>[id,{configured:id!=='openai',models:{balanced:'fixture',quality:'fixture',fast:'fixture'}}]))}}));
+    await page.route('**/api/translation/status',route=>route.fulfill({json:{service:'cattalk-translation',configured:true,requiresToken:false,models:{balanced:'fixture',quality:'fixture',fast:'fixture'},promptVersion:'test-only',providers:Object.fromEntries(['gemini','groq','openrouter','openai','translategemma','qwenlocal','libretranslate'].map(id=>[id,{configured:id!=='openai'||openaiConfigured,models:{balanced:'fixture',quality:'fixture',fast:'fixture'}}]))}}));
     await page.route('**/api/translate',async route=>{
       const data=route.request().postDataJSON();requests.push(data);
       const events=data.text==='خطا' ? [{type:'error',code:'TEST',message:'خطای آزمایشی اتصال'}] : [{type:'delta',text:data.source==='fa'?'こんにちは':'سلام'},{type:'complete',model:'TEST FIXTURE',promptVersion:'test-only'}];
@@ -49,10 +49,15 @@ async function run() {
     await page.getByText('ترجمه کامل شد',{exact:true}).waitFor();
     assert.equal(requests.at(-1).provider,'openrouter');
     const beforeMissing=requests.length;
-    await page.getByRole('radio',{name:'OpenAI',exact:true}).click();
+    await page.getByRole('radio',{name:'ChatGPT / OpenAI',exact:true}).click();
     await page.waitForTimeout(650);
     assert.equal(requests.length,beforeMissing);
     assert.equal(await page.getByRole('button',{name:'ترجمهٔ همین متن',exact:true}).isDisabled(),true);
+    await page.getByTestId('openai-billing-note').waitFor();
+    assert.ok((await page.getByTestId('openai-region-note').innerText()).includes('ایران'));
+    openaiConfigured=true;await page.getByRole('button',{name:'بررسی دوباره',exact:true}).click();
+    await page.getByText('ترجمه کامل شد',{exact:true}).waitFor();assert.equal(requests.at(-1).provider,'openai');
+    assert.ok(!JSON.stringify(requests.at(-1)).includes('apiKey'));
     await page.getByRole('radio',{name:'Google Gemini',exact:true}).click();
     await page.getByText('ترجمه کامل شد',{exact:true}).waitFor();
     await page.getByRole('button',{name:'جابه‌جایی زبان‌ها',exact:true}).click();

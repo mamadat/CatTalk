@@ -15,6 +15,7 @@ import {ScreenshotPanel} from './ScreenshotPanel';
 import {TravelPanel} from './TravelPanel';
 import {SessionPanel} from './SessionPanel';
 import {SavePhraseButton} from './SavePhraseButton';
+import {OpenAISetup} from './OpenAISetup';
 import {Transport} from './controller';
 import {createTranslationMemory} from './memory';
 
@@ -95,6 +96,7 @@ export function TranslatorScreen({sharedChat,onSharedHandled}:{sharedChat?:Share
       <T style={{fontSize:12,color:ready ? C.green : C.muted}}>{checking ? 'در حال بررسی…' : isLocal ? status?.providers?.[provider]?.message || 'در حال بررسی موتور محلی؛ «بررسی دوباره» را بزنید.' : ready ? 'کلید این سرویس تنظیم شده؛ دسترسی مدل هنگام درخواست بررسی می‌شود.' : 'کلید این سرویس هنوز تنظیم نشده است.'}</T>
       {!!selectedModel && <T style={{fontSize:11,color:C.muted,textAlign:'left'}}>{selectedModel}</T>}
     </Card>
+    {provider==='openai'&&<OpenAISetup/>}
     <View style={ts.languageBar}>
       <View style={{flex:1,alignItems:'center'}}><T style={ts.language}>{languageNames[source]}</T><T style={s.muted}>متن شما</T></View>
       <Pressable accessibilityRole="button" accessibilityLabel="جابه‌جایی زبان‌ها" style={ts.swap} onPress={swap}><Icon name="swap-horizontal" color={C.green}/></Pressable>
