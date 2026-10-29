@@ -8,6 +8,11 @@ import {createTranslationServer} from '../server/app';
 import {PauseDetector} from '../src/translation/vad';
 const sample='1\r\n00:00:01,000 --> 00:00:03,500\r\n<b>سلام</b> &amp; دنیا\r\nخط دوم\r\n\r\n2\r\n00:00:03,000 --> 00:00:05,000\r\nخداحافظ\r\n';
 const request:TranslationRequest={source:'fa',target:'ja',mode:'balanced',tone:'preserve',context:'',text:'سلام'};
+test('subtitle import and export preserve literal comparisons and angle-bracket placeholders',()=>{
+ const source='1\n00:00:01,000 --> 00:00:02,000\n<b>عدد</b> < 5 > 2 و <name> &amp; 日本';
+ const cues=parseSubtitles(source);assert.equal(cues[0].text,'عدد < 5 > 2 و <name> & 日本');
+ const translated='数 < 5 > 2 と <name> & فارسی';const exported=translatedSRT(cues,new Map([[cues[0].id,translated]]));assert.equal(parseSubtitles(exported)[0].text,translated);assert.ok(exported.includes('&lt;name&gt;'));
+});
 test('SRT/VTT preserve exact timing, overlapping cues and line breaks as plain text',()=>{
  const cues=parseSubtitles('\uFEFF'+sample);assert.equal(cues[0].startMs,1000);assert.equal(cues[0].endMs,3500);assert.equal(cues[0].text,'سلام & دنیا\nخط دوم');assert.equal(activeSubtitles(cues,3200).length,2);assert.equal(activeSubtitles(cues,5000).length,0);
  const vtt=parseSubtitles('WEBVTT\n\nNOTE ignored\ncomment\n\nSTYLE\n::cue {color: red;}\n\nmy-id\n01:02.003 --> 01:04.800 align:start\n<v Akira>こんにちは</v>');assert.equal(vtt[0].startMs,62003);assert.equal(vtt[0].text,'こんにちは');

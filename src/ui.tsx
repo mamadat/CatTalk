@@ -13,7 +13,7 @@ export function Button({title, onPress, icon, secondary, disabled, danger, small
   </Pressable>;
 }
 export function Chips<K extends string>({options, value, onChange}: {options: Partial<Record<K, string>>; value: K; onChange: (key: K) => void}) {
-  return <View style={s.chips}>{(Object.keys(options) as K[]).map(key => <Pressable key={key} accessibilityRole="radio" accessibilityState={{selected: value === key}} onPress={() => onChange(key)} style={[s.chip, value === key && s.chipSelected]}><T style={{fontSize: 13, color: value === key ? '#fff' : C.muted}}>{options[key]}</T></Pressable>)}</View>;
+  return <View style={s.chips}>{(Object.keys(options) as K[]).map(key => <Pressable key={key} accessibilityRole="radio" aria-checked={value === key} accessibilityState={{checked: value === key}} onPress={() => onChange(key)} style={[s.chip, value === key && s.chipSelected]}><T style={{fontSize: 13, color: value === key ? '#fff' : C.muted}}>{options[key]}</T></Pressable>)}</View>;
 }
 export const s = StyleSheet.create({
   text: {fontFamily: Platform.select({web:'Tahoma, Arial, sans-serif',android:'sans-serif',ios:'System'}), fontSize: 15, lineHeight: 25, color: C.ink, textAlign:'right'},

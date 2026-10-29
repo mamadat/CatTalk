@@ -10,6 +10,11 @@ import {createTranslationServer,ServerConfig} from '../server/app';
 import {LiveState,LiveTranslationController} from '../src/translation/controller';
 
 const request:TranslationRequest={text:'سلام، فردا نمی‌آیم.',source:'fa',target:'ja',mode:'balanced',tone:'preserve',context:''};
+test('status refresh failure returns a sanitized response and leaves the gateway available',async()=>{
+ let fail=true;const server=createTranslationServer({configured:false,models:DEFAULT_MODELS,allowedOrigins:[],refreshProviders:async()=>{if(fail)throw new Error('private provider diagnostic');return {} as any;}},async()=>{});
+ await new Promise<void>(resolve=>server.listen(0,'127.0.0.1',resolve));const url=`http://127.0.0.1:${(server.address() as AddressInfo).port}/api/translation/status`;
+ try{const response=await fetch(url);assert.equal(response.status,503);const data=await response.json();assert.equal(data.code,'STATUS_UNAVAILABLE');assert.ok(!JSON.stringify(data).includes('private provider'));fail=false;assert.equal((await fetch(url)).status,200);}finally{server.closeAllConnections();await new Promise<void>(resolve=>server.close(()=>resolve()));}
+});
 const event=(value:unknown) => `data: ${JSON.stringify(value)}\r\n\r\n`;
 function streamResponse(value:string,bytesPerChunk=7) {
   const bytes=new TextEncoder().encode(value);

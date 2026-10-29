@@ -7,8 +7,8 @@ async function run(){
  const page=await browser.newPage({viewport:{width:390,height:844}}),requests=[],transcriptions=[],errors=[];let malformed=false,hold=false,release;
  page.on('pageerror',e=>errors.push(e.message));
  await page.addInitScript(()=>{
-  window.__shared=[];window.__displayMode='audio';window.__recordedTracks=[];window.__captureStarts=0;
-  const Recorder=window.MediaRecorder;window.MediaRecorder=class extends Recorder{constructor(stream,options){super(stream,options);window.__recordedTracks.push(stream.getTracks().map(t=>t.kind));}start(...args){window.__captureStarts++;return super.start(...args);}};
+  window.__shared=[];window.__displayMode='audio';window.__recordedTracks=[];window.__captureStarts=0;window.__failNextRecorder=false;
+  const Recorder=window.MediaRecorder;window.MediaRecorder=class extends Recorder{constructor(stream,options){if(window.__failNextRecorder){window.__failNextRecorder=false;throw new Error('fixture recorder unavailable');}super(stream,options);window.__recordedTracks.push(stream.getTracks().map(t=>t.kind));}start(...args){window.__captureStarts++;return super.start(...args);}};
   navigator.mediaDevices.getDisplayMedia=async options=>{window.__displayOptions=options;if(window.__displayMode==='denied')throw new DOMException('fixture denial','NotAllowedError');const canvas=document.createElement('canvas');canvas.width=64;canvas.height=64;canvas.getContext('2d').fillRect(0,0,64,64);const stream=canvas.captureStream(5);const context=new AudioContext(),tone=context.createOscillator(),destination=context.createMediaStreamDestination();tone.connect(destination);tone.start();if(window.__displayMode==='audio')destination.stream.getAudioTracks().forEach(t=>stream.addTrack(t));stream.getTracks().forEach(t=>t.addEventListener('ended',()=>{tone.stop();context.close();},{once:true}));window.__shared.push(stream);return stream;};
  });
  const models={balanced:'FIXTURE',quality:'FIXTURE',fast:'FIXTURE'};
@@ -20,7 +20,7 @@ async function run(){
  async function pick(name,file){const event=page.waitForEvent('filechooser');await button(name).click();await(await event).setFiles(file);}
  try{
   await page.goto(process.env.CATTALK_URL||'http://localhost:8787');await page.getByRole('tab',{name:'ترجمه',exact:true}).click();await radio('جلسه و زیرنویس').click();
-  assert.equal(await radio('میکروفون گوشی یا رایانه').count(),1);await button('شروع مکالمهٔ زنده').waitFor();
+  assert.equal(await radio('میکروفون گوشی یا رایانه').getAttribute('aria-checked'),'true');await button('شروع مکالمهٔ زنده').waitFor();
   await radio('صدای تب یا سیستم رایانه').click();await button('انتخاب تب یا سیستم و شروع ترجمه').click();await button('ثبت همین نوبت صدای تب').waitFor();await page.waitForTimeout(500);await button('ثبت همین نوبت صدای تب').click();await wait(()=>transcriptions.length===1);await wait(async()=> (await page.getByTestId('session-caption').innerText())==='日本語の翻訳');
   assert.ok(transcriptions[0].audioBase64.length>100);assert.equal(transcriptions[0].language,'fa');assert.ok(transcriptions[0].mimeType.startsWith('audio/'));assert.deepEqual(await page.evaluate(()=>window.__recordedTracks),[['audio'],['audio']]);
   // A tab visibility change must not cancel browser audio sharing.
@@ -30,6 +30,9 @@ async function run(){
   const beforeMissing=transcriptions.length;await button('انتخاب تب یا سیستم و شروع ترجمه').click();await page.getByRole('alert').filter({hasText:'منبع انتخاب‌شده صدا ندارد'}).waitFor();assert.equal(transcriptions.length,beforeMissing);assert.equal(await page.evaluate(()=>window.__shared.at(-1).getTracks().every(t=>t.readyState==='ended')),true);
   await page.evaluate(()=>window.__displayMode='denied');await button('انتخاب تب یا سیستم و شروع ترجمه').click();await page.getByRole('alert').filter({hasText:'اشتراک صدا تأیید نشد'}).waitFor();
   await page.evaluate(()=>window.__displayMode='audio');await button('انتخاب تب یا سیستم و شروع ترجمه').click();await button('ثبت همین نوبت صدای تب').waitFor();await page.evaluate(()=>window.__shared.at(-1).getVideoTracks()[0].dispatchEvent(new Event('ended')));await button('انتخاب تب یا سیستم و شروع ترجمه').waitFor();assert.equal(transcriptions.length,beforeMissing);
+
+  // Failure while restarting a subsequent turn must close all tracks and remain recoverable.
+  await button('انتخاب تب یا سیستم و شروع ترجمه').click();await button('ثبت همین نوبت صدای تب').waitFor();await page.waitForTimeout(350);await page.evaluate(()=>window.__failNextRecorder=true);await button('ثبت همین نوبت صدای تب').click();await page.getByRole('alert').filter({hasText:'شروع نوبت بعدی ضبط صدای تب ممکن نشد'}).waitFor();assert.equal(await page.evaluate(()=>window.__shared.at(-1).getTracks().every(t=>t.readyState==='ended')),true);await button('انتخاب تب یا سیستم و شروع ترجمه').waitFor();assert.deepEqual(errors,[]);
 
   await radio('فیلم و زیرنویس').click();const subtitle=Array.from({length:10},(_,i)=>`${i+1}\n00:00:${String(i*2+1).padStart(2,'0')},000 --> 00:00:${String(i*2+2).padStart(2,'0')},900\nقطعه ${i+1}\n`).join('\n');
   const file={name:'fixture.srt',mimeType:'application/x-subrip',buffer:Buffer.from(subtitle)};

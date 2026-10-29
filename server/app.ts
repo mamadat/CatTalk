@@ -56,7 +56,7 @@ export function createTranslationServer(config:ServerConfig, provider:Translatio
       res.setHeader('Access-Control-Allow-Origin',origin);res.setHeader('Vary','Origin');
     }
     if (req.method === 'OPTIONS') {
-      res.writeHead(204,{'Access-Control-Allow-Methods':'GET, POST, OPTIONS','Access-Control-Allow-Headers':'Content-Type, Authorization','Access-Control-Max-Age':'600'});res.end();return;
+      res.writeHead(204,{'Access-Control-Allow-Methods':'GET, POST, DELETE, OPTIONS','Access-Control-Allow-Headers':'Content-Type, Authorization','Access-Control-Max-Age':'600'});res.end();return;
     }
     let pathname:string;
     try {pathname=decodeURIComponent(new URL(req.url || '/', 'http://localhost').pathname);}
@@ -85,9 +85,11 @@ export function createTranslationServer(config:ServerConfig, provider:Translatio
     }
     if (req.method === 'GET' && pathname === '/api/translation/status') {
       if (!authenticated(req,config.accessToken)) {json(res,401,{code:'UNAUTHORIZED',message:'توکن اتصال به سرور درست نیست.'});return;}
+      try {
       const providers=config.refreshProviders ? await config.refreshProviders() : config.providers;
       const voice=config.voice?.refreshCapabilities?await config.voice.refreshCapabilities():config.voice?.capabilities;
-      json(res,200,{service:'cattalk-translation',configured:providers ? Object.values(providers).some(v=>v.configured) : config.configured,requiresToken:!!config.accessToken,models:config.models,providers,voice,vision:config.vision?.status,promptVersion:PROMPT_VERSION});return;
+      if(!res.destroyed)json(res,200,{service:'cattalk-translation',configured:providers ? Object.values(providers).some(v=>v.configured) : config.configured,requiresToken:!!config.accessToken,models:config.models,providers,voice,vision:config.vision?.status,promptVersion:PROMPT_VERSION});
+      }catch{if(!res.destroyed)json(res,503,{code:'STATUS_UNAVAILABLE',message:'بررسی وضعیت موتورهای ترجمه انجام نشد؛ دوباره تلاش کنید.'});}return;
     }
     const isVoice=['/api/transcribe','/api/speech','/api/ocr'].includes(pathname);
     if (req.method !== 'POST' || (!isVoice && pathname !== '/api/translate')) {

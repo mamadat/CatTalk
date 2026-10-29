@@ -26,16 +26,20 @@ async function run() {
     await page.getByText(name,{exact:true}).waitFor();
   }
   try {
+    await page.addInitScript(()=>{const original=navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices);window.__holdCapture=false;window.__ownedStreams=[];navigator.mediaDevices.getUserMedia=async options=>{const stream=await original(options);window.__ownedStreams.push(stream);if(window.__holdCapture){window.__holdCapture=false;return new Promise(resolve=>{window.__releaseCapture=()=>resolve(stream);});}return stream;};});
     await page.goto(process.env.CATTALK_URL || 'http://localhost:8082', {waitUntil:'networkidle'});
     await button('اول، گربه‌ام را معرفی کنم').click();
     await page.getByLabel('سن گربه',{exact:true}).fill('۲');
     await profile('نارنج');
     await tab('بشنو').click();
+    assert.equal(await tab('بشنو').getAttribute('aria-selected'),'true');
+    await page.evaluate(()=>window.__holdCapture=true);await button('شروع ضبط').click();await page.waitForFunction(()=>!!window.__releaseCapture);await button('لغو انتظار مجوز ضبط').click();await page.evaluate(()=>window.__releaseCapture());await page.waitForFunction(()=>window.__ownedStreams[0].getTracks().every(t=>t.readyState==='ended'));
     await button('شروع ضبط').click();
     await button('پایان و ذخیرهٔ ضبط').waitFor();
     await page.waitForTimeout(1400);
     await button('پایان و ذخیرهٔ ضبط').click();
     await page.getByRole('button',{name:/شنیدن صدا/}).waitFor();
+    assert.equal(await page.evaluate(()=>window.__ownedStreams.every(stream=>stream.getTracks().every(t=>t.readyState==='ended'))),true);
     await radio('کنار ظرف غذا').click();
     await radio('به من نگاه می‌کند').click();
     await button('ثبت و مشاهدهٔ برداشت').click();

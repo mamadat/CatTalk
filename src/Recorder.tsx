@@ -1,32 +1,12 @@
 import React, {useEffect, useRef, useState} from 'react';
 import { AppState, View } from 'react-native';
-import { AudioModule, RecordingPresets, setAudioModeAsync, useAudioPlayer, useAudioPlayerStatus, useAudioRecorder, useAudioRecorderState } from 'expo-audio';
+import { AudioModule, RecordingPresets, setAudioModeAsync, useAudioRecorder, useAudioRecorderState } from 'expo-audio';
 import { AudioClip } from './domain';
 import { persistAudio, removeAudio } from './audioFiles';
 import {Button, C, T} from './ui';
 
-let pauseActive: (() => void) | undefined;
-
-export function Playback({clip}: {clip: AudioClip}) {
-  const player = useAudioPlayer(clip.uri);
-  const status = useAudioPlayerStatus(player);
-  const [error, setError] = useState('');
-  const pause = useRef(() => player.pause()).current;
-  useEffect(() => () => {if (pauseActive === pause) pauseActive = undefined;}, [pause]);
-  async function toggle() {
-    try {
-      setError('');
-      if (status.playing) player.pause();
-      else {
-        pauseActive?.(); pauseActive = pause;
-        await setAudioModeAsync({allowsRecording:false, playsInSilentMode:true});
-        if (status.didJustFinish || (status.duration > 0 && status.currentTime >= status.duration - 0.1)) await player.seekTo(0);
-        player.play();
-      }
-    } catch { setError('پخش صدا ممکن نشد؛ دوباره تلاش کنید.'); }
-  }
-  return <View style={{gap:6}}><Button secondary small title={status.playing ? 'توقف پخش' : `شنیدن صدا · ${Math.round(clip.seconds).toLocaleString('fa-IR')} ثانیه`} icon={status.playing ? 'pause' : 'play'} onPress={toggle}/>{error ? <T style={{color:C.danger}}>{error}</T> : null}</View>;
-}
+export {Playback} from './Playback';
+import {pauseCurrentAudio} from './Playback';
 
 export function Recorder({onRecorded, onBusy, title = 'شروع ضبط', maxSeconds = 20}: {onRecorded: (clip: AudioClip) => Promise<void>; onBusy?: (busy: boolean) => void; title?: string; maxSeconds?: number}) {
   const recorder = useAudioRecorder({...RecordingPresets.HIGH_QUALITY, isMeteringEnabled: true});
@@ -35,12 +15,14 @@ export function Recorder({onRecorded, onBusy, title = 'شروع ضبط', maxSeco
   const [error, setError] = useState('');
   const lock = useRef(false);
   const active = useRef(false);
+  const mounted=useRef(true),generation=useRef(0);
   const startTime = useRef(0);
   const stopRef = useRef<() => Promise<void>>(async () => {});
   useEffect(() => { onBusy?.(busy || state.isRecording); }, [busy, state.isRecording, onBusy]);
   useEffect(() => {
-    const sub = AppState.addEventListener('change', next => { if (next !== 'active' && active.current) void stopRef.current(); });
-    return () => {sub.remove(); if (active.current) void recorder.stop().catch(() => {});};
+    mounted.current=true;
+    const sub = AppState.addEventListener('change', next => { if (next !== 'active') {generation.current++;if(active.current)void stopRef.current();} });
+    return () => {mounted.current=false;generation.current++;sub.remove();/* useAudioRecorder owns native disposal. */};
   }, [recorder]);
   async function stop() {
     if (lock.current || !active.current) return;
@@ -49,14 +31,17 @@ export function Recorder({onRecorded, onBusy, title = 'شروع ضبط', maxSeco
     try {
       const seconds = Math.min(maxSeconds, (Date.now() - startTime.current) / 1000);
       await recorder.stop(); active.current = false;
+      if(!mounted.current)return;
       await setAudioModeAsync({allowsRecording:false, playsInSilentMode:true});
+      if(!mounted.current)return;
       if (!recorder.uri || seconds < 1) throw new Error('ضبط خیلی کوتاه بود؛ دست‌کم یک ثانیه ضبط کنید.');
       saved = await persistAudio(recorder.uri);
+      if(!mounted.current){await removeAudio(saved).catch(()=>{});return;}
       await onRecorded({uri:saved, seconds});
     } catch (e) {
       if (saved) await removeAudio(saved).catch(() => {});
-      setError(e instanceof Error ? e.message : 'ذخیرهٔ صدا ناموفق بود.');
-    } finally {active.current = false; lock.current = false; setBusy(false); onBusy?.(false);}
+      if(mounted.current)setError(e instanceof Error ? e.message : 'ذخیرهٔ صدا ناموفق بود.');
+    } finally {active.current = false; lock.current = false;if(mounted.current){setBusy(false); onBusy?.(false);}}
   }
   stopRef.current = stop;
   useEffect(() => {
@@ -66,16 +51,20 @@ export function Recorder({onRecorded, onBusy, title = 'شروع ضبط', maxSeco
   }, [state.isRecording, maxSeconds]);
   async function start() {
     if (lock.current) return;
+    const id=++generation.current;const current=()=>mounted.current&&id===generation.current;
     lock.current = true; setBusy(true); setError('');
     try {
-      pauseActive?.(); pauseActive = undefined;
+      pauseCurrentAudio();
       const permission = await AudioModule.requestRecordingPermissionsAsync();
+      if(!current())return;
       if (!permission.granted) throw new Error('دسترسی میکروفون را در تنظیمات دستگاه یا مرورگر فعال کنید.');
       await setAudioModeAsync({allowsRecording:true, playsInSilentMode:true});
+      if(!current())return;
       await recorder.prepareToRecordAsync();
+      if(!current()){if(mounted.current)await recorder.stop().catch(()=>{});return;}
       recorder.record(); startTime.current = Date.now(); active.current = true;
-    } catch (e) {setError(e instanceof Error ? e.message : 'ضبط آغاز نشد. میکروفون را بررسی کنید.');}
-    finally {lock.current = false; setBusy(false);}
+    } catch (e) {if(current())setError(e instanceof Error ? e.message : 'ضبط آغاز نشد. میکروفون را بررسی کنید.');}
+    finally {lock.current = false;if(mounted.current){setBusy(false);if(!active.current)void setAudioModeAsync({allowsRecording:false,playsInSilentMode:true}).catch(()=>{});}}
   }
   return <View style={{gap:14}}>
     <View style={{height:52, flexDirection:'row', justifyContent:'center', alignItems:'center', gap:4}}>

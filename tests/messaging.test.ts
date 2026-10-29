@@ -49,12 +49,15 @@ test('uncertain network sends never auto-retry the same draft',async()=>{
  for(let n=0;n<2;n++)await assert.rejects(service.send(draft.id),e=>e instanceof Error&&!e.message.includes('secret endpoint'));assert.equal(calls,1);
 });
 test('HTTP inbox and send endpoints require the private gateway token; webhooks require own signature',async()=>{
- const service=createMessagingService(env,async()=>new Response(JSON.stringify({ok:true})),()=>time);const server=createTranslationServer({configured:false,models:DEFAULT_MODELS,accessToken:'gateway-secret',messaging:service,allowedOrigins:[]},async()=>{});
+ const service=createMessagingService(env,async()=>new Response(JSON.stringify({ok:true})),()=>time);const server=createTranslationServer({configured:false,models:DEFAULT_MODELS,accessToken:'gateway-secret',messaging:service,allowedOrigins:['http://localhost:8081']},async()=>{});
  await new Promise<void>(resolve=>server.listen(0,'127.0.0.1',resolve));const url=`http://127.0.0.1:${(server.address() as AddressInfo).port}`;
  try{
   assert.equal((await fetch(url+'/api/messaging/inbox')).status,401);
   assert.equal((await fetch(url+'/api/webhooks/telegram',{method:'POST',body:JSON.stringify(telegram)})).status,403);
   assert.equal((await fetch(url+'/api/webhooks/telegram',{method:'POST',headers:{'X-Telegram-Bot-Api-Secret-Token':'telegram-hook'},body:JSON.stringify(telegram)})).status,200);
   const response=await fetch(url+'/api/messaging/inbox',{headers:{Authorization:'Bearer gateway-secret'}});assert.equal((await response.json()).messages.length,1);
+  const preflight=await fetch(url+'/api/messaging/inbox',{method:'OPTIONS',headers:{Origin:'http://localhost:8081','Access-Control-Request-Method':'DELETE','Access-Control-Request-Headers':'Authorization'}});assert.equal(preflight.status,204);assert.ok(preflight.headers.get('Access-Control-Allow-Methods')?.split(/,\s*/).includes('DELETE'));
+  assert.equal((await fetch(url+'/api/messaging/inbox',{method:'DELETE',headers:{Origin:'http://localhost:8081'}})).status,401);
+  assert.equal((await fetch(url+'/api/messaging/inbox',{method:'DELETE',headers:{Origin:'http://localhost:8081',Authorization:'Bearer gateway-secret'}})).status,200);assert.equal(service.list().length,0);
  }finally{server.closeAllConnections();await new Promise<void>(resolve=>server.close(()=>resolve()));}
 });

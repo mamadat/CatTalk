@@ -63,6 +63,13 @@ test('pause detection keeps long speech and short pauses, and ends only after 3s
   assert.equal(long.update(-70,62899),'wait');assert.equal(long.update(-70,62900),'speech');
   assert.equal(new PauseDetector(0).update(-100,10000),'empty');
 });
+test('brief noise is discarded after silence and cannot hold the microphone for two minutes',()=>{
+ const vad=new PauseDetector(0);assert.equal(vad.update(-20,100),'wait');assert.equal(vad.update(-100,3099),'wait');assert.equal(vad.update(-100,3100),'empty');
+ const recovered=new PauseDetector(0);recovered.update(-20,100);recovered.update(-20,300);assert.equal(recovered.update(-100,3300),'speech');
+});
+test('recording duration cap includes leading silence so local STT never receives a 129-second turn',()=>{
+ for(const limit of [20000,120000]){const vad=new PauseDetector(0,3000,limit);assert.equal(vad.update(-100,9000),'wait');for(let time=9500;time<limit;time+=100)assert.equal(vad.update(-20,time),'wait');assert.equal(vad.update(-20,limit),'speech');}
+});
 test('voice pipeline waits for complete full-context translation before speaking',async()=>{
   const spoken:string[]=[],states:VoiceTurnState[]=[];let finish!:()=>void;
   const controller=new VoiceTurnController(async(r,_signal,emit)=>{

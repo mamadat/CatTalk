@@ -36,6 +36,7 @@ export function SharedAudio(props:MicrophoneProps){
    }
    function listen(){
     if(closed||id!==generation.current||!wanted.current)return;
+    try{
     const startedAt=Date.now(),vad=new PauseDetector(startedAt,3000,latest.current.maxTurnMs||120000),chunks:Blob[]=[];let sending=false;
     const mime=['audio/webm;codecs=opus','audio/mp4','audio/ogg;codecs=opus'].find(value=>MediaRecorder.isTypeSupported(value));
     recorder=new MediaRecorder(audio,{...(mime?{mimeType:mime}:{}),audioBitsPerSecond:48000});
@@ -49,6 +50,7 @@ export function SharedAudio(props:MicrophoneProps){
      else timer.current=setTimeout(listen,40);
     };
     current.start();setPhase('صدای اشتراک‌شده دریافت می‌شود؛ صفحه را برای ادامهٔ ضبط باز نگه دارید.');
+    }catch{fail('شروع نوبت بعدی ضبط صدای تب ممکن نشد؛ اشتراک صدا متوقف شد. دوباره شروع کنید.');}
    }
    setActive(true);setOpening(false);latest.current.onActiveChange(true);listen();
   }catch(e){display?.getTracks().forEach(t=>t.stop());if(context?.state!=='closed')void context?.close().catch(()=>{});if(id===generation.current){stop();latest.current.onError(e instanceof Error&&e.name==='NotAllowedError'?'اشتراک صدا تأیید نشد یا لغو شد.':e instanceof Error?e.message:'دریافت صدای اشتراک‌شده ممکن نشد.');}}

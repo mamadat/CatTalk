@@ -22,7 +22,7 @@ export function parseSubtitles(input:string):SubtitleCue[]{
   if(!timing)throw new Error(`ساختار زیرنویس در قطعهٔ ${cues.length+1} معتبر نیست؛ SRT یا VTT متنی UTF-8 انتخاب کنید.`);
   const startMs=timestamp(timing[1]),endMs=timestamp(timing[2]);
   if(endMs<=startMs||startMs<(cues.at(-1)?.startMs||0))throw new Error('زمان پایان باید پس از آغاز و ترتیب قطعه‌ها بر اساس زمان آغاز باشد.');
-  const text=lines.slice(line+1).join('\n').replace(/<[^>]*>/g,'').replace(/&(?:amp|lt|gt|quot|apos|nbsp);/g,entity=>({'&amp;':'&','&lt;':'<','&gt;':'>','&quot;':'"','&apos;':"'",'&nbsp;':' '}[entity]||entity)).trim();
+  const text=lines.slice(line+1).join('\n').replace(/<\/?(?:b|i|u|font|c|v|lang|ruby|rt)(?=[\s.>])[^>]*>|<(?:\d{2,3}:)?\d{2}:\d{2}\.\d{3}>/gi,'').replace(/&(?:amp|lt|gt|quot|apos|nbsp);/g,entity=>({'&amp;':'&','&lt;':'<','&gt;':'>','&quot;':'"','&apos;':"'",'&nbsp;':' '}[entity]||entity)).trim();
   if(!text||text.length>2000)throw new Error('هر قطعه باید ۱ تا ۲۰۰۰ نویسهٔ متنی داشته باشد.');
   cues.push({id:`cue-${cues.length+1}`,startMs,endMs,text});
   if(cues.length>3000)throw new Error('حداکثر ۳۰۰۰ قطعهٔ زیرنویس در یک فایل پشتیبانی می‌شود.');
@@ -41,5 +41,5 @@ export function parseSubtitleTranslation(raw:string,expected:ReadonlyArray<{id:s
 }
 export function activeSubtitles(cues:SubtitleCue[],timeMs:number):SubtitleCue[]{return cues.filter(c=>c.startMs<=timeMs&&timeMs<c.endMs);}
 export function translatedSRT(cues:SubtitleCue[],translations:ReadonlyMap<string,string>):string{
- return cues.filter(c=>translations.has(c.id)).map((c,i)=>`${i+1}\n${subtitleTime(c.startMs)} --> ${subtitleTime(c.endMs)}\n${translations.get(c.id)!.replace(/<[^>]*>/g,'').replace(/\r/g,'').split('\n').filter(line=>line.trim()).join('\n')}\n`).join('\n');
+ return cues.filter(c=>translations.has(c.id)).map((c,i)=>`${i+1}\n${subtitleTime(c.startMs)} --> ${subtitleTime(c.endMs)}\n${translations.get(c.id)!.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\r/g,'').split('\n').filter(line=>line.trim()).join('\n')}\n`).join('\n');
 }
