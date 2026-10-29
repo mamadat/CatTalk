@@ -10,8 +10,9 @@ export const languageNames = { fa: 'فارسی', ja: '日本語' } as const;
 export const modeNames = { balanced: 'متعادل', quality: 'دقت بیشتر', fast: 'سریع‌تر' } as const;
 export const toneNames = { preserve: 'حفظ لحن متن', polite: 'محترمانه', casual: 'خودمانی' } as const;
 export const MAX_TEXT_LENGTH = 2000;
-export const PROMPT_VERSION = 'fa-ja-v1.1';
+export const PROMPT_VERSION = 'fa-ja-v1.2';
 export interface TranslationRequest {
+  subtitleCues?:{id:string;text:string}[];
   glossary?:{source:string;target:string}[];
   alternative?:{reference:string;style:'fluent'|'precise'};
   provider?: ProviderId;
@@ -50,5 +51,11 @@ export function validateTranslation(input: unknown): TranslationRequest {
   let glossary:TranslationRequest['glossary'];let alternative:TranslationRequest['alternative'];
   if(value.glossary!==undefined){if(!Array.isArray(value.glossary)||value.glossary.length>12)throw new TranslationError('INVALID_GLOSSARY','حداکثر ۱۲ اصطلاح مرتبط در هر درخواست مجاز است.');glossary=value.glossary.map((term:any)=>{if(!term||typeof term.source!=='string'||typeof term.target!=='string'||!term.source.trim()||!term.target.trim()||term.source.length>80||term.target.length>80)throw new TranslationError('INVALID_GLOSSARY','اصطلاح واژه‌نامه معتبر نیست.');return {source:term.source,target:term.target};});}
   if(value.alternative!==undefined){const a=value.alternative as Record<string,unknown>;if(!a||typeof a.reference!=='string'||!a.reference.trim()||a.reference.length>4000||!['fluent','precise'].includes(String(a.style)))throw new TranslationError('INVALID_ALTERNATIVE','درخواست ترجمهٔ جایگزین معتبر نیست.');alternative={reference:a.reference,style:a.style as 'fluent'|'precise'};}
-  return {...(glossary?{glossary}:{}),...(alternative?{alternative}:{}),...(value.provider !== undefined ? {provider:value.provider as ProviderId} : {}),text:value.text, source:value.source as Language, target:value.target as Language, mode:value.mode as TranslationMode, tone:value.tone as TranslationTone, context:value.context};
+  let subtitleCues:TranslationRequest['subtitleCues'];
+  if(value.subtitleCues!==undefined){
+    if(alternative||!Array.isArray(value.subtitleCues)||!value.subtitleCues.length||value.subtitleCues.length>8)throw new TranslationError('INVALID_SUBTITLES','بستهٔ زیرنویس باید ۱ تا ۸ قطعه داشته باشد.');
+    const ids=new Set<string>();subtitleCues=value.subtitleCues.map((cue:any)=>{if(!cue||typeof cue.id!=='string'||!/^[a-zA-Z0-9_-]{1,40}$/.test(cue.id)||ids.has(cue.id)||typeof cue.text!=='string'||!cue.text.trim()||cue.text.length>2000)throw new TranslationError('INVALID_SUBTITLES','قطعهٔ زیرنویس معتبر نیست.');ids.add(cue.id);return {id:cue.id,text:cue.text};});
+    if(subtitleCues.map(c=>c.text).join('\n')!==value.text)throw new TranslationError('INVALID_SUBTITLES','متن بسته با قطعه‌های زیرنویس یکسان نیست.');
+  }
+  return {...(subtitleCues?{subtitleCues}:{}),...(glossary?{glossary}:{}),...(alternative?{alternative}:{}),...(value.provider !== undefined ? {provider:value.provider as ProviderId} : {}),text:value.text, source:value.source as Language, target:value.target as Language, mode:value.mode as TranslationMode, tone:value.tone as TranslationTone, context:value.context};
 }

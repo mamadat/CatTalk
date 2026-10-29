@@ -29,6 +29,7 @@
     "expo-share-intent": "~5.1.0",
     "expo-sharing": "~14.0.8",
     "expo-speech": "~14.0.8",
+    "expo-video": "~3.0.16",
     "react": "19.1.0",
     "react-dom": "19.1.0",
     "react-native": "0.81.5",

@@ -1,6 +1,6 @@
 {
   "purpose": "Initial human-review cases, not benchmark results or verified reference translations",
-  "promptVersion": "fa-ja-v1.1",
+  "promptVersion": "fa-ja-v1.2",
   "reviewFields": ["meaning", "omissions", "additions", "negation", "numbersAndUnits", "register", "glossary", "protectedStrings", "latencyMs"],
   "cases": [
     {"id":"fa-negation", "source":"fa", "target":"ja", "text":"نگفتم که نمی‌آیم؛ گفتم شاید دیر برسم.", "check":"Preserve both negations and uncertainty; do not turn delay into cancellation."},
